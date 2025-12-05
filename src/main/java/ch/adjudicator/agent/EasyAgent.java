@@ -92,7 +92,7 @@ public class EasyAgent implements Agent {
     }
 
     @Override
-    public void onError(String message) {
+    public void onError(String message, Throwable cause) {
         LOGGER.error("[{}] ERROR: {}", name, message);
     }
 

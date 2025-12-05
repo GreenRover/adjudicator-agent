@@ -34,5 +34,5 @@ public interface Agent {
      * 
      * @param message Error message from the server
      */
-    void onError(String message);
+    void onError(String message, Throwable cause);
 }

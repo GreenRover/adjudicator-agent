@@ -1,7 +1,8 @@
 package ch.adjudicator.agent;
 
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
 
 class AgentConfigurationTest {
 
@@ -9,11 +10,11 @@ class AgentConfigurationTest {
     void testDefaults() {
         // Use a non-existent file to ensure defaults are loaded
         AgentConfiguration config = new AgentConfiguration(new String[]{}, "non-existent.env");
-        assertEquals("grpc.adjudicator.ch", config.getServerAddress());
-        assertEquals("1234", config.getApiKey());
-        assertEquals("EasyBot", config.getAgentName());
-        assertEquals("TRAINING", config.getMode());
-        assertEquals("300+0", config.getTimeControl());
+        assertThat(config.getServerAddress(), is("grpc.adjudicator.ch"));
+        assertThat(config.getApiKey(), is("1234"));
+        assertThat(config.getAgentName(), is("EasyBot"));
+        assertThat(config.getMode(), is("TRAINING"));
+        assertThat(config.getTimeControl(), is("300+0"));
     }
 
     @Test
@@ -27,16 +28,22 @@ class AgentConfigurationTest {
         };
         AgentConfiguration config = new AgentConfiguration(args);
         
-        assertEquals("localhost:9090", config.getServerAddress());
-        assertEquals("secret", config.getApiKey());
-        assertEquals("TestBot", config.getAgentName());
-        assertEquals("RANKED", config.getMode());
-        assertEquals("600+5", config.getTimeControl());
+        assertThat(config.getServerAddress(), is("localhost:9090"));
+        assertThat(config.getApiKey(), is("secret"));
+        assertThat(config.getAgentName(), is("TestBot"));
+        assertThat(config.getMode(), is("RANKED"));
+        assertThat(config.getTimeControl(), is("600+5"));
     }
 
     @Test
     void testValidationSuccess() {
         AgentConfiguration config = new AgentConfiguration(new String[]{"--key", "123"});
-        assertDoesNotThrow(config::validate);
+        try {
+            config.validate();
+            // If we reach here, validation succeeded (no exception thrown)
+            assertThat(true, is(true));
+        } catch (Exception e) {
+            assertThat("Validation should not throw exception: " + e.getMessage(), false, is(true));
+        }
     }
 }

@@ -5,6 +5,8 @@ import chess_contest.ChessGameGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -17,6 +19,8 @@ import java.util.concurrent.atomic.AtomicReference;
  * bidirectional streaming connection for playing chess games.
  */
 public class AdjudicatorClient {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AdjudicatorClient.class);
+
     private final String serverAddress;
     private final String apiKey;
     private final boolean useTls;
@@ -48,12 +52,14 @@ public class AdjudicatorClient {
         // Create channel
         ManagedChannel channel;
         if (useTls) {
+            LOGGER.info("Connecting with SSL to {}", serverAddress);
             // Use TLS with default system trust store
-            channel = ManagedChannelBuilder.forTarget(serverAddress)
+            channel = ManagedChannelBuilder.forAddress(serverAddress, 443)
                     .useTransportSecurity()
                     .build();
         } else {
-            channel = ManagedChannelBuilder.forTarget(serverAddress)
+            LOGGER.info("Connecting plain text to {}", serverAddress);
+            channel = ManagedChannelBuilder.forAddress(serverAddress, 80)
                     .usePlaintext()
                     .build();
         }
@@ -77,7 +83,7 @@ public class AdjudicatorClient {
                                         gameId = message.getGameStarted().getGameId();
                                         agent.onGameStart(new GameInfo(
                                                 message.getGameStarted().getGameId(),
-                                                Color.valueOf(message.getGameStarted().getColor()),
+                                                Color.valueOf(message.getGameStarted().getColor().toUpperCase()),
                                                 message.getGameStarted().getInitialTimeMs(),
                                                 message.getGameStarted().getIncrementMs()
                                         ));
@@ -102,7 +108,7 @@ public class AdjudicatorClient {
 
                                     case GAME_OVER:
                                         agent.onGameOver(new GameOverInfo(
-                                                GameResult.valueOf(message.getGameOver().getResult()),
+                                                GameResult.valueOf(message.getGameOver().getResult().toUpperCase()),
                                                 message.getGameOver().getReason(),
                                                 message.getGameOver().getFinalPgn()
                                         ));
@@ -116,20 +122,21 @@ public class AdjudicatorClient {
                                         break;
 
                                     case ERROR:
-                                        agent.onError(message.getError().getMessage());
+                                        agent.onError(message.getError().getMessage(), null);
                                         break;
 
                                     default:
                                         break;
                                 }
                             } catch (Exception e) {
+                                LOGGER.error("Exception in onNext handling message type: {}", message.getMessageCase(), e);
                                 requestObserver.get().onError(e);
                             }
                         }
 
                         @Override
                         public void onError(Throwable t) {
-                            agent.onError("Stream error: " + t.getMessage());
+                            agent.onError("Stream error: " + t.getClass().getName() + ": " + t.getMessage(), t);
                             // Give the logging a moment to complete before closing
                             try {
                                 Thread.sleep(100);

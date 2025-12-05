@@ -1,0 +1,2 @@
+*.bin binary
+src/main/resources/polyglot/*.bin filter=lfs diff=lfs merge=lfs -text

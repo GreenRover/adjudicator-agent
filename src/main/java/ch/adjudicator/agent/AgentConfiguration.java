@@ -10,7 +10,7 @@ import java.util.Properties;
 
 /**
  * Handles configuration loading from agent.env file and command line arguments.
- * Priority: CLI arguments > agent.env > Default values.
+ * Priority: CLI arguments > Environment variables > agent.env > Default values.
  */
 public class AgentConfiguration {
     private static final Logger LOGGER = LoggerFactory.getLogger(AgentConfiguration.class);
@@ -27,6 +27,7 @@ public class AgentConfiguration {
     private String agentName;
     private String mode;
     private String timeControl;
+    private boolean monitorCpuTemp = true;
 
     public AgentConfiguration(String[] args) {
         this(args, ENV_FILE_NAME);
@@ -88,6 +89,9 @@ public class AgentConfiguration {
                 case "--time":
                     this.timeControl = args[i + 1];
                     break;
+                case "--no-cpu-temp":
+                    this.monitorCpuTemp = false;
+                    break;
             }
         }
     }
@@ -114,6 +118,10 @@ public class AgentConfiguration {
 
     public String getTimeControl() {
         return timeControl;
+    }
+
+    public boolean isMonitorCpuTemp() {
+        return monitorCpuTemp;
     }
 
     public void validate() {

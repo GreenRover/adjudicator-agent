@@ -6,7 +6,8 @@ import ch.adjudicator.client.MoveRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
 
 class EasyAgentTest {
 
@@ -24,10 +25,10 @@ class EasyAgentTest {
         MoveRequest request = new MoveRequest("", 300000, 300000);
         String move = agent.getMove(request);
         
-        assertNotNull(move);
-        assertFalse(move.isEmpty());
+        assertThat(move, notNullValue());
+        assertThat(move.isEmpty(), is(false));
         // Initial move should be a white opening (e.g. "e2e4")
-        assertTrue(move.matches("[a-h][27][a-h][3456]"));
+        assertThat(move.matches("[a-h][27][a-h][3456]"), is(true));
     }
 
     @Test
@@ -42,11 +43,11 @@ class EasyAgentTest {
         MoveRequest request = new MoveRequest("e2e4", 290000, 295000);
         String move = agent.getMove(request);
         
-        assertNotNull(move);
+        assertThat(move, notNullValue());
         // Should be a valid response from black
         // e.g. e7e5, c7c5, etc.
         // Simple regex for a move
-        assertTrue(move.matches("[a-h][1-8][a-h][1-8][qrbn]?"));
+        assertThat(move.matches("[a-h][1-8][a-h][1-8][qrbn]?"), is(true));
     }
     
     @Test
