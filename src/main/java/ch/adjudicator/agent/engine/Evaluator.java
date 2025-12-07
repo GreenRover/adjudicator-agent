@@ -16,6 +16,20 @@ public class Evaluator {
     private static final int CASTLING_RIGHT_BONUS = 45;
     private static final int HAS_CASTLED_BONUS = 50;
     
+    // Pawn Structure
+    private static final int ISOLATED_PAWN_PENALTY = -10;
+    private static final int DOUBLED_PAWN_PENALTY = -10;
+    private static final int[] PASSED_PAWN_BONUS = {0, 10, 20, 40, 80, 160, 240, 0}; 
+
+    private static final long[] FILE_MASKS = {
+        0x0101010101010101L, 0x0202020202020202L, 0x0404040404040404L, 0x0808080808080808L,
+        0x1010101010101010L, 0x2020202020202020L, 0x4040404040404040L, 0x8080808080808080L
+    };
+    
+    private static final long[] RANK_MASKS = {
+        0xFFL, 0xFF00L, 0xFF0000L, 0xFF000000L, 0xFF00000000L, 0xFF0000000000L, 0xFF000000000000L, 0xFF00000000000000L
+    };
+    
     // Piece-Square Tables for Middle Game
     // Values are from white's perspective, need to flip for black
     
@@ -209,6 +223,8 @@ public class Evaluator {
         // Interpolate between middlegame and endgame scores
         int score = (mgScore * phase + egScore * (256 - phase)) / 256;
         
+        score += evaluatePawnStructure(board);
+
         return board.isWhiteToMove() ? score : -score;
     }
 
@@ -275,7 +291,7 @@ public class Evaluator {
         long king = white ? board.getWhiteKing() : board.getBlackKing();
         if (king != 0) {
             int square = Long.numberOfTrailingZeros(king);
-            int tableSquare = white ? square : (square ^ 56); // Flip for black
+            int tableSquare = white ? (square ^ 56) : square; // Flip for white
             score += middlegame ? MG_KING_TABLE[tableSquare] : EG_KING_TABLE[tableSquare];
         }
         
@@ -290,7 +306,7 @@ public class Evaluator {
         
         while (bitboard != 0) {
             int square = Long.numberOfTrailingZeros(bitboard);
-            int tableSquare = white ? square : (square ^ 56); // Flip rank for black
+            int tableSquare = white ? (square ^ 56) : square; // Flip rank for white (Table is R8->R1)
             
             score += value + table[tableSquare];
             
@@ -418,6 +434,93 @@ public class Evaluator {
         // Queens? Not requested, but usually Queens have mobility too.
         // Plan says "Bishops/Rooks: ...". It doesn't explicitly exclude Queens but usually Queens are handled similarly or separately.
         // I'll stick to Knights and Bishops/Rooks as requested.
+        
+        return score;
+    }
+
+    private static int evaluatePawnStructure(BoardStatus board) {
+        int score = 0;
+        long whitePawns = board.getWhitePawns();
+        long blackPawns = board.getBlackPawns();
+        
+        // White Pawns
+        for (int file = 0; file < 8; file++) {
+            long fileMask = FILE_MASKS[file];
+            long pawnsInFile = whitePawns & fileMask;
+            
+            if (pawnsInFile != 0) {
+                // Doubled
+                if (Long.bitCount(pawnsInFile) > 1) {
+                    score += DOUBLED_PAWN_PENALTY;
+                }
+                
+                // Isolated
+                long leftMask = (file > 0) ? FILE_MASKS[file - 1] : 0;
+                long rightMask = (file < 7) ? FILE_MASKS[file + 1] : 0;
+                if (((whitePawns & leftMask) == 0) && ((whitePawns & rightMask) == 0)) {
+                    score += ISOLATED_PAWN_PENALTY;
+                }
+            }
+        }
+        
+        // Passed Pawns (White)
+        long tempWhite = whitePawns;
+        while (tempWhite != 0) {
+            int sq = Long.numberOfTrailingZeros(tempWhite);
+            int rank = sq / 8;
+            int file = sq % 8;
+            
+            long frontSpan = 0L;
+            for (int r = rank + 1; r < 8; r++) {
+                 frontSpan |= (1L << (r * 8 + file));
+                 if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
+                 if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
+            }
+            
+            if ((frontSpan & blackPawns) == 0) {
+                score += PASSED_PAWN_BONUS[rank];
+            }
+            
+            tempWhite &= tempWhite - 1;
+        }
+
+        // Black Pawns
+        for (int file = 0; file < 8; file++) {
+            long fileMask = FILE_MASKS[file];
+            long pawnsInFile = blackPawns & fileMask;
+            
+            if (pawnsInFile != 0) {
+                if (Long.bitCount(pawnsInFile) > 1) {
+                    score -= DOUBLED_PAWN_PENALTY;
+                }
+                
+                long leftMask = (file > 0) ? FILE_MASKS[file - 1] : 0;
+                long rightMask = (file < 7) ? FILE_MASKS[file + 1] : 0;
+                if (((blackPawns & leftMask) == 0) && ((blackPawns & rightMask) == 0)) {
+                    score -= ISOLATED_PAWN_PENALTY;
+                }
+            }
+        }
+        
+        long tempBlack = blackPawns;
+        while (tempBlack != 0) {
+            int sq = Long.numberOfTrailingZeros(tempBlack);
+            int rank = sq / 8;
+            int file = sq % 8;
+            
+            long frontSpan = 0L;
+            for (int r = rank - 1; r >= 0; r--) {
+                 frontSpan |= (1L << (r * 8 + file));
+                 if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
+                 if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
+            }
+            
+            if ((frontSpan & whitePawns) == 0) {
+                score -= PASSED_PAWN_BONUS[7 - rank];
+            }
+            
+            tempBlack &= tempBlack - 1;
+        }
         
         return score;
     }

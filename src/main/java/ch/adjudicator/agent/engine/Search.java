@@ -1,6 +1,9 @@
 package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
+import com.github.bhlangonijr.chesslib.Piece;
+import com.github.bhlangonijr.chesslib.PieceType;
+import com.github.bhlangonijr.chesslib.Side;
 import com.github.bhlangonijr.chesslib.move.Move;
 
 import java.util.ArrayList;
@@ -22,6 +25,7 @@ public class Search {
     private Move bestMoveFound;
     private int nodesSearched;
     private int depthReached;
+    private boolean enableNmp = true;
     
     // Advanced move ordering
     private TranspositionTable transpositionTable;
@@ -97,6 +101,10 @@ public class Search {
     public void setStopTime(long stopTime) {
         this.stopTime = stopTime;
     }
+
+    public void setEnableNmp(boolean enableNmp) {
+        this.enableNmp = enableNmp;
+    }
     
     public void stop() {
         this.stopped = true;
@@ -108,12 +116,36 @@ public class Search {
 
     private void runIterativeDeepening(long allocatedTimeMs) {
         // Iterative Deepening: search progressively deeper
+        int score = 0;
         for (int depth = 1; depth <= MAX_DEPTH; depth++) {
             if (stopped) {
                 break;
             }
             
-            int score = searchRoot(depth);
+            int currentScore;
+            if (depth == 1) {
+                currentScore = searchRoot(depth, -INFINITY, INFINITY);
+            } else {
+                // Aspiration Windows
+                int window = 50;
+                int alpha = score - window;
+                int beta = score + window;
+                currentScore = searchRoot(depth, alpha, beta);
+                
+                if (currentScore <= alpha) {
+                    // Fail Low
+                    alpha = -INFINITY;
+                    currentScore = searchRoot(depth, alpha, beta);
+                }
+                
+                if (currentScore >= beta) {
+                    // Fail High
+                    beta = INFINITY;
+                    currentScore = searchRoot(depth, alpha, beta);
+                }
+            }
+            
+            score = currentScore;
             
             // Check if we ran out of time
             if (stopped) {
@@ -151,7 +183,11 @@ public class Search {
     /**
      * Search from root position.
      */
-    private int searchRoot(int depth) {
+    int searchRoot(int depth) {
+        return searchRoot(depth, -INFINITY, INFINITY);
+    }
+
+    int searchRoot(int depth, int alpha, int beta) {
         List<Move> moves = board.legalMoves();
         
         if (moves.isEmpty()) {
@@ -166,8 +202,7 @@ public class Search {
         
         int bestScore = -INFINITY;
         Move localBestMove = null;
-        int alpha = -INFINITY;
-        int beta = INFINITY;
+        int originalAlpha = alpha;
         
         // Use pickBestMove for advanced move ordering
         for (int i = 0; i < moves.size(); i++) {
@@ -190,15 +225,26 @@ public class Search {
             if (score > bestScore) {
                 bestScore = score;
                 localBestMove = move;
-                alpha = score;
+                if (score > alpha) {
+                    alpha = score;
+                }
+                
+                if (score >= beta) {
+                    break;
+                }
             }
         }
         
         // Store result in transposition table
         if (!stopped && localBestMove != null) {
             bestMoveFound = localBestMove;
-            transpositionTable.store(zobristHash, localBestMove, bestScore, depth, 
-                                    TranspositionTable.TTEntry.EXACT);
+            int flag = TranspositionTable.TTEntry.EXACT;
+            if (bestScore <= originalAlpha) {
+                flag = TranspositionTable.TTEntry.UPPER_BOUND;
+            } else if (bestScore >= beta) {
+                flag = TranspositionTable.TTEntry.LOWER_BOUND;
+            }
+            transpositionTable.store(zobristHash, localBestMove, bestScore, depth, flag);
         }
         
         return bestScore;
@@ -244,6 +290,29 @@ public class Search {
             }
         }
         
+        // Null Move Pruning
+        if (enableNmp && depth >= 3 && !board.isKingAttacked()) {
+            Side side = board.getSideToMove();
+            // Check for non-pawn/non-king material to avoid zugzwang
+            long pieces = board.getBitboard(side);
+            long pawns = board.getBitboard(Piece.make(side, PieceType.PAWN));
+            long kings = board.getBitboard(Piece.make(side, PieceType.KING));
+            
+            if ((pieces ^ pawns ^ kings) != 0) {
+                board.doNullMove();
+                int R = 2;
+                // Search with null window and reduced depth
+                int score = -alphaBeta(-beta, -beta + 1, depth - 1 - R, ply + 1);
+                board.undoMove();
+                
+                if (stopped) return 0;
+                
+                if (score >= beta) {
+                    return beta;
+                }
+            }
+        }
+
         // Depth 0: switch to quiescence search
         if (depth <= 0) {
             return quiescence(alpha, beta);
@@ -266,6 +335,8 @@ public class Search {
         Move bestMove = null;
         int originalAlpha = alpha;
         
+        boolean inCheck = board.isKingAttacked();
+
         // Use pickBestMove for advanced move ordering
         for (int i = 0; i < moves.size(); i++) {
             if (stopped) {
@@ -277,7 +348,57 @@ public class Search {
             Move move = moves.get(i);
             
             board.doMove(move);
-            int score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
+            
+            int score;
+            
+            if (i == 0) {
+                // First move: Full Window Search
+                score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
+            } else {
+                // Late moves: Null Window Search (PVS)
+                // Search with (alpha, alpha + 1)
+                
+                // Interaction with LMR: apply primarily during the Null Window search step
+                int searchDepth = depth - 1;
+                
+                // Check if LMR is applicable
+                if (i >= 4 && depth >= 3 && !isCapture(move) && !isPromotion(move) && !inCheck) {
+                    searchDepth = depth - 2;
+                }
+                
+                // Search with Null Window (alpha, alpha+1)
+                // Note: -alpha - 1 corresponds to -beta in recursive call where beta = alpha + 1
+                score = -alphaBeta(-alpha - 1, -alpha, searchDepth, ply + 1);
+                
+                // Re-Search: If score > alpha (move was actually good) AND score < beta, 
+                // search again with full window
+                if (score > alpha && score < beta) {
+                    score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
+                }
+                
+                // Also, if LMR was used and it failed high (score >= beta), 
+                // or if it improved alpha but we only did re-search on (alpha < score < beta),
+                // we might need to handle the case where LMR failed high but was unsafe?
+                // The instructions say "Re-Search: If score > alpha ... AND score < beta".
+                // This implies we trust LMR beta cutoffs.
+                
+                // However, if LMR returns score > alpha, and we didn't re-search (e.g. score >= beta),
+                // we are accepting the LMR result.
+                
+                // Wait, if score > alpha (meaning score >= alpha+1 since integer), 
+                // and if we used reduced depth, isn't it better to re-verify?
+                // Standard PVS usually re-searches if (score > alpha).
+                // The instruction says "AND score < beta".
+                
+                // What if score >= beta? We return beta (cutoff).
+                // If we used LMR, this is a "soft" cutoff.
+                // But the instructions don't ask to re-verify soft cutoffs.
+                
+                // One edge case: If LMR was used, and score > alpha.
+                // If score < beta, we re-search with FULL depth (depth - 1). This is correct.
+                // If score >= beta, we cutoff.
+            }
+            
             board.undoMove();
             
             if (stopped) {
@@ -346,6 +467,14 @@ public class Search {
             // Only consider captures and promotions
             if (!isCapture(move) && !isPromotion(move)) {
                 continue;
+            }
+            
+            // SEE Pruning for bad captures
+            if (isCapture(move) && !isPromotion(move)) {
+                int seeScore = StaticExchangeEvaluator.see(board, move);
+                if (seeScore < 0) {
+                    continue;
+                }
             }
             
             if (stopped) {
