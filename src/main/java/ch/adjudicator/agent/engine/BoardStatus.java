@@ -1,7 +1,9 @@
 package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
+import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Piece;
+import com.github.bhlangonijr.chesslib.Side;
 import com.github.bhlangonijr.chesslib.Square;
 import lombok.Getter;
 
@@ -36,6 +38,16 @@ public class BoardStatus {
     private long blackQueens;
     @Getter
     private long blackKing;
+
+    // Castling rights
+    @Getter
+    private boolean whiteCastleKingSide;
+    @Getter
+    private boolean whiteCastleQueenSide;
+    @Getter
+    private boolean blackCastleKingSide;
+    @Getter
+    private boolean blackCastleQueenSide;
 
     // Game state
     @Getter
@@ -115,6 +127,15 @@ public class BoardStatus {
         }
 
         // Set game state
-        whiteToMove = board.getSideToMove() == com.github.bhlangonijr.chesslib.Side.WHITE;
+        whiteToMove = board.getSideToMove() == Side.WHITE;
+
+        // Set castling rights
+        CastleRight whiteCastle = board.getCastleRight(Side.WHITE);
+        CastleRight blackCastle = board.getCastleRight(Side.BLACK);
+
+        whiteCastleKingSide = whiteCastle.equals(CastleRight.KING_SIDE) || whiteCastle.equals(CastleRight.KING_AND_QUEEN_SIDE);
+        whiteCastleQueenSide = whiteCastle.equals(CastleRight.QUEEN_SIDE) || whiteCastle.equals(CastleRight.KING_AND_QUEEN_SIDE);
+        blackCastleKingSide = blackCastle.equals(CastleRight.KING_SIDE) || blackCastle.equals(CastleRight.KING_AND_QUEEN_SIDE);
+        blackCastleQueenSide = blackCastle.equals(CastleRight.QUEEN_SIDE) || blackCastle.equals(CastleRight.KING_AND_QUEEN_SIDE);
     }
 }

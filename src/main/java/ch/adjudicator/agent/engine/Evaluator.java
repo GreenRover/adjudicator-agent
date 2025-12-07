@@ -12,6 +12,10 @@ public class Evaluator {
     private static final int ROOK_VALUE = 500;
     private static final int QUEEN_VALUE = 900;
     
+    // Castling bonuses
+    private static final int CASTLING_RIGHT_BONUS = 45;
+    private static final int HAS_CASTLED_BONUS = 50;
+    
     // Piece-Square Tables for Middle Game
     // Values are from white's perspective, need to flip for black
     
@@ -60,7 +64,7 @@ public class Evaluator {
     };
     
     private static final int[] MG_QUEEN_TABLE = {
-        -28,   0,  29,  12,  59,  44,  43,  45,
+        -28,   0,  29,  12, -20,  44,  43,  45,
         -24, -39,  -5,   1, -16,  57,  28,  54,
         -13, -17,   7,   8,  29,  56,  47,  57,
         -27, -27, -16, -16,  -1,  17,  -2,   1,
@@ -71,9 +75,9 @@ public class Evaluator {
     };
     
     private static final int[] MG_KING_TABLE = {
-        -65,  23,  16, -15, -56, -34,   2,  13,
-        29,  -1, -20,  -7,  -8,  -4, -38, -29,
-        -9,  24,   2, -16, -20,   6,  22, -22,
+        -65,  23,  16, -15,  10,  20,  30,  13,
+         29,  -1, -20,  -7, -50,  -4, -38, -29,
+         -9,  24,   2, -16, -20,   6,  22, -22,
         -17, -20, -12, -27, -30, -25, -14, -36,
         -49,  -1, -27, -39, -46, -44, -33, -51,
         -14, -14, -22, -46, -44, -30, -15, -27,
@@ -148,6 +152,35 @@ public class Evaluator {
         -53, -34, -21, -11, -28, -14, -24, -43
     };
     
+    // Mobility and Blocking constants
+    private static final int MOBILITY_WEIGHT = 10;
+    private static final int CENTRALITY_BONUS = 15;
+    private static final int BLOCKING_PENALTY = 50;
+    
+    private static final long[] KNIGHT_MOVES = new long[64];
+    
+    static {
+        // Initialize Knight moves
+        int[] offsets = {-17, -15, -10, -6, 6, 10, 15, 17};
+        for (int i = 0; i < 64; i++) {
+            long moves = 0;
+            int r = i / 8;
+            int c = i % 8;
+            for (int offset : offsets) {
+                int dest = i + offset;
+                if (dest >= 0 && dest < 64) {
+                    int dr = dest / 8;
+                    int dc = dest % 8;
+                    // Check if move is valid (max 2 squares distance in any direction)
+                    if (Math.abs(dr - r) <= 2 && Math.abs(dc - c) <= 2) {
+                        moves |= (1L << dest);
+                    }
+                }
+            }
+            KNIGHT_MOVES[i] = moves;
+        }
+    }
+
     /**
      * Evaluate position from white's perspective.
      * Positive score = white is better, negative = black is better.
@@ -162,15 +195,47 @@ public class Evaluator {
         // Evaluate white pieces
         mgScore += evaluatePieces(board, true, true);
         egScore += evaluatePieces(board, true, false);
+        mgScore += evaluateCastling(board, true);
+        mgScore += evaluateMobility(board, true);
+        mgScore += evaluateBlocking(board, true);
         
         // Evaluate black pieces
         mgScore -= evaluatePieces(board, false, true);
         egScore -= evaluatePieces(board, false, false);
+        mgScore -= evaluateCastling(board, false);
+        mgScore -= evaluateMobility(board, false);
+        mgScore -= evaluateBlocking(board, false);
         
         // Interpolate between middlegame and endgame scores
         int score = (mgScore * phase + egScore * (256 - phase)) / 256;
         
         return board.isWhiteToMove() ? score : -score;
+    }
+
+    /**
+     * Evaluate castling rights and status.
+     */
+    private static int evaluateCastling(BoardStatus board, boolean white) {
+        int score = 0;
+        boolean kRight = white ? board.isWhiteCastleKingSide() : board.isBlackCastleKingSide();
+        boolean qRight = white ? board.isWhiteCastleQueenSide() : board.isBlackCastleQueenSide();
+        long king = white ? board.getWhiteKing() : board.getBlackKing();
+
+        // Castling rights bonus
+        if (kRight) score += CASTLING_RIGHT_BONUS;
+        if (qRight) score += CASTLING_RIGHT_BONUS;
+
+        // Has castled bonus (approximate)
+        if (!kRight && !qRight) {
+            // Check if king is on castled squares
+            int kingSq = Long.numberOfTrailingZeros(king);
+            if (white) {
+                if (kingSq == 6 || kingSq == 2) score += HAS_CASTLED_BONUS; // g1=6, c1=2
+            } else {
+                if (kingSq == 62 || kingSq == 58) score += HAS_CASTLED_BONUS; // g8=62, c8=58
+            }
+        }
+        return score;
     }
     
     /**
@@ -231,6 +296,128 @@ public class Evaluator {
             
             bitboard &= bitboard - 1; // Clear the lowest set bit
         }
+        
+        return score;
+    }
+
+    private static int popCount(long bitboard) {
+        return Long.bitCount(bitboard);
+    }
+
+    private static int evaluateBlocking(BoardStatus board, boolean white) {
+        int score = 0;
+        long king = white ? board.getWhiteKing() : board.getBlackKing();
+        long pieces = white ? (board.getWhitePawns() | board.getWhiteKnights() | board.getWhiteBishops() | board.getWhiteRooks() | board.getWhiteQueens())
+                            : (board.getBlackPawns() | board.getBlackKnights() | board.getBlackBishops() | board.getBlackRooks() | board.getBlackQueens());
+
+        // King Blocking Penalty
+        if (white) {
+            // Check if King is on e2 (index 12)
+            if ((king & (1L << 12)) != 0) {
+                // Check if own pieces are on d1 (3) or f1 (5)
+                if ((pieces & (1L << 3)) != 0 || (pieces & (1L << 5)) != 0) {
+                    score -= BLOCKING_PENALTY;
+                }
+            }
+        } else {
+            // Check if King is on e7 (index 52)
+            if ((king & (1L << 52)) != 0) {
+                // Check if own pieces are on d8 (59) or f8 (61)
+                if ((pieces & (1L << 59)) != 0 || (pieces & (1L << 61)) != 0) {
+                    score -= BLOCKING_PENALTY;
+                }
+            }
+        }
+        return score;
+    }
+
+    private static int evaluateMobility(BoardStatus board, boolean white) {
+        int score = 0;
+        long ownPieces = white ? (board.getWhitePawns() | board.getWhiteKnights() | board.getWhiteBishops() | board.getWhiteRooks() | board.getWhiteQueens() | board.getWhiteKing())
+                               : (board.getBlackPawns() | board.getBlackKnights() | board.getBlackBishops() | board.getBlackRooks() | board.getBlackQueens() | board.getBlackKing());
+        
+        // Knights
+        long knights = white ? board.getWhiteKnights() : board.getBlackKnights();
+        while (knights != 0) {
+            int sq = Long.numberOfTrailingZeros(knights);
+            long attacks = KNIGHT_MOVES[sq] & ~ownPieces;
+            score += popCount(attacks) * MOBILITY_WEIGHT;
+            knights &= knights - 1;
+        }
+
+        // Bishops/Rooks Centrality
+        // Squares: d4(27), e4(28), d5(35), e5(36)
+        // We give bonus if the piece controls any of these.
+        // Simplified: Check if piece is on a line that intersects center.
+        
+        long rooks = white ? board.getWhiteRooks() : board.getBlackRooks();
+        while (rooks != 0) {
+            int sq = Long.numberOfTrailingZeros(rooks);
+            int rank = sq / 8;
+            int file = sq % 8;
+            
+            // d=3, e=4. Rank 4=3, Rank 5=4.
+            if (file == 3 || file == 4 || rank == 3 || rank == 4) {
+                 // Counts how many center squares it theoretically controls
+                 // If on d-file, it controls d4 and d5 (2 squares)
+                 // If on Rank 4, it controls d4 and e4 (2 squares)
+                 // If on d4, it controls d4, d5, e4 (Wait, intersection?)
+                 // Let's just give fixed bonus for "Centrality" if it attacks ANY center square?
+                 // "Give a small bonus for distinct squares controlled"
+                 
+                 int controlled = 0;
+                 if (file == 3) controlled += 2; // d4, d5
+                 if (file == 4) controlled += 2; // e4, e5
+                 if (rank == 3) controlled += 2; // d4, e4
+                 if (rank == 4) controlled += 2; // d5, e5
+                 
+                 // If on d4 (file 3, rank 3): 2 + 2 = 4. Correct (d4, d5, d4, e4). d4 counted twice?
+                 // "distinct squares".
+                 // d4 controls: d4(self?), d5, e4...
+                 // Actually, "control" usually means attacking. You don't attack your own square.
+                 // But for this proxy, let's keep it simple.
+                 // If on d-file, attacks d4, d5.
+                 // If on rank 4, attacks d4, e4.
+                 
+                 // Let's count explicitly.
+                 boolean hitsD4 = (file == 3 || rank == 3);
+                 boolean hitsE4 = (file == 4 || rank == 3);
+                 boolean hitsD5 = (file == 3 || rank == 4);
+                 boolean hitsE5 = (file == 4 || rank == 4);
+                 
+                 int distinct = (hitsD4 ? 1 : 0) + (hitsE4 ? 1 : 0) + (hitsD5 ? 1 : 0) + (hitsE5 ? 1 : 0);
+                 score += distinct * CENTRALITY_BONUS;
+            }
+            rooks &= rooks - 1;
+        }
+        
+        long bishops = white ? board.getWhiteBishops() : board.getBlackBishops();
+        while (bishops != 0) {
+            int sq = Long.numberOfTrailingZeros(bishops);
+            int r = sq / 8;
+            int c = sq % 8;
+            
+            // Diagonals:
+            // Main: r - c = const. Anti: r + c = const.
+            // d4(3,3): r-c=0, r+c=6.
+            // e4(3,4): r-c=-1, r+c=7.
+            // d5(4,3): r-c=1, r+c=7.
+            // e5(4,4): r-c=0, r+c=8.
+            
+            boolean hitsD4 = (r - c == 0) || (r + c == 6);
+            boolean hitsE4 = (r - c == -1) || (r + c == 7);
+            boolean hitsD5 = (r - c == 1) || (r + c == 7);
+            boolean hitsE5 = (r - c == 0) || (r + c == 8);
+            
+            int distinct = (hitsD4 ? 1 : 0) + (hitsE4 ? 1 : 0) + (hitsD5 ? 1 : 0) + (hitsE5 ? 1 : 0);
+            score += distinct * CENTRALITY_BONUS;
+
+            bishops &= bishops - 1;
+        }
+        
+        // Queens? Not requested, but usually Queens have mobility too.
+        // Plan says "Bishops/Rooks: ...". It doesn't explicitly exclude Queens but usually Queens are handled similarly or separately.
+        // I'll stick to Knights and Bishops/Rooks as requested.
         
         return score;
     }

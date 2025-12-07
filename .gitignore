@@ -4,3 +4,4 @@
 /buf.lock
 agent.env
 logs
+/dependency-reduced-pom.xml
