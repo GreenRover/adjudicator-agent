@@ -154,11 +154,11 @@ class PolyglotBookTest {
      * Helper method to encode a chess move in Polyglot book format.
      * 
      * Polyglot move encoding uses a 16-bit integer with three bit fields:
-     * - Bits 0-5 (6 bits): "from" square (0-63, where a1=0, h8=63)
-     * - Bits 6-11 (6 bits): "to" square (0-63)
+     * - Bits 0-5 (6 bits): "to" square (0-63, where a1=0, h8=63)
+     * - Bits 6-11 (6 bits): "from" square (0-63)
      * - Bits 12-14 (3 bits): promotion piece (0=none, 1=knight, 2=bishop, 3=rook, 4=queen)
      * 
-     * Example: e2e4 would be encoded as from=12 (e2), to=28 (e4), promotion=0
+     * Example: e2e4 would be encoded as to=28 (e4), from=12 (e2), promotion=0
      * 
      * @param from the source square (0-63)
      * @param to the destination square (0-63)
@@ -166,6 +166,6 @@ class PolyglotBookTest {
      * @return the encoded move as a 16-bit integer
      */
     private int encodeMove(int from, int to, int promotion) {
-        return from | (to << 6) | (promotion << 12);
+        return to | (from << 6) | (promotion << 12);
     }
 }

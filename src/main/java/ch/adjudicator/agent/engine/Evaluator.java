@@ -152,7 +152,7 @@ public class Evaluator {
      * Evaluate position from white's perspective.
      * Positive score = white is better, negative = black is better.
      */
-    public static int evaluate(BitBoard board) {
+    public static int evaluate(BoardStatus board) {
         int mgScore = 0;
         int egScore = 0;
         
@@ -176,7 +176,7 @@ public class Evaluator {
     /**
      * Calculate game phase (256 = opening, 0 = endgame).
      */
-    private static int calculatePhase(BitBoard board) {
+    private static int calculatePhase(BoardStatus board) {
         int phase = 0;
         phase += Long.bitCount(board.getWhiteKnights() | board.getBlackKnights()) * 1;
         phase += Long.bitCount(board.getWhiteBishops() | board.getBlackBishops()) * 1;
@@ -191,7 +191,7 @@ public class Evaluator {
     /**
      * Evaluate all pieces of one color.
      */
-    private static int evaluatePieces(BitBoard board, boolean white, boolean middlegame) {
+    private static int evaluatePieces(BoardStatus board, boolean white, boolean middlegame) {
         int score = 0;
         
         long pawns = white ? board.getWhitePawns() : board.getBlackPawns();

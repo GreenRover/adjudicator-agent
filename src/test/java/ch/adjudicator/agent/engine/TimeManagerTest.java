@@ -21,20 +21,20 @@ class TimeManagerTest {
     void testOpeningPhase() {
         // Increment 0
         TimeManager tm = new TimeManager(0);
-        // Move 5 (Opening <= 10), Multiplier 0.7
+        // Move 5 (Opening <= 10), Multiplier 0.3
         // Time 60000ms. Available 59950.
         // Base = 59950 / 20 = 2997.
-        // Multiplied = 2997 * 0.7 = 2097.
-        // Limits: Min 100, Max 10000. 2097 is within limits.
-        // 10% cap: 59950 / 10 = 5995. 2097 is within cap.
+        // Multiplied = 2997 * 0.3 = 899.
+        // Limits: Min 100, Max 10000. 899 is within limits.
+        // 10% cap: 59950 / 10 = 5995. 899 is within cap.
         long allocated = tm.allocateTime(60000, 5);
         
         // Calculation check
         long available = 60000 - 50;
         long expectedBase = available / 20;
-        long expected = (long) (expectedBase * 0.7);
+        long expected = (long) (expectedBase * 0.3);
         
-        assertThat("Opening moves should use 0.7 multiplier", allocated, is(expected));
+        assertThat("Opening moves should use 0.3 multiplier", allocated, is(expected));
     }
 
     @Test
@@ -57,14 +57,14 @@ class TimeManagerTest {
     @Test
     void testEndgamePhase() {
         TimeManager tm = new TimeManager(0);
-        // Move 40 (Endgame > 30), Multiplier 0.8
+        // Move 40 (Endgame > 30), Multiplier 1.3
         long allocated = tm.allocateTime(60000, 40);
         
         long available = 60000 - 50;
         long expectedBase = available / 20;
-        long expected = (long) (expectedBase * 0.8);
+        long expected = (long) (expectedBase * 1.3);
         
-        assertThat("Endgame moves should use 0.8 multiplier", allocated, is(expected));
+        assertThat("Endgame moves should use 1.3 multiplier", allocated, is(expected));
     }
 
     @Test
@@ -93,7 +93,7 @@ class TimeManagerTest {
         // Panic is < 1000. Let's try 1100ms.
         // Available 1050. 
         // Base = 1050 / 20 = 52.
-        // Multiplier 0.7 (move 1) -> 36.
+        // Multiplier 0.3 (move 1) -> 15.6.
         // Min limit is 100.
         // 10% cap is 105. 
         // Result should be 100.

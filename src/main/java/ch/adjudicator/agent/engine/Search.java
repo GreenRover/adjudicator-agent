@@ -159,8 +159,7 @@ public class Search {
         }
         
         // Get Zobrist hash for current position
-        BitBoard bitBoard = new BitBoard(board);
-        long zobristHash = bitBoard.getZobristHash();
+        long zobristHash = board.getZobristKey();
         
         // Get hash move from transposition table
         Move hashMove = moveOrdering.getHashMove(zobristHash);
@@ -226,8 +225,7 @@ public class Search {
         nodesSearched++;
         
         // Get Zobrist hash for current position
-        BitBoard bitBoard = new BitBoard(board);
-        long zobristHash = bitBoard.getZobristHash();
+        long zobristHash = board.getZobristKey();
         
         // Probe transposition table
         TranspositionTable.TTEntry ttEntry = transpositionTable.probe(zobristHash);
@@ -330,7 +328,7 @@ public class Search {
         nodesSearched++;
         
         // Stand-pat: evaluate current position
-        BitBoard fastBoard = new BitBoard(board);
+        BoardStatus fastBoard = new BoardStatus(board);
         int standPat = Evaluator.evaluate(fastBoard);
         
         if (standPat >= beta) {

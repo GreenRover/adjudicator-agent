@@ -14,34 +14,34 @@ import java.util.Random;
  */
 public class PolyglotBook {
     private static final int ENTRY_SIZE = 16; // 8 bytes key + 2 bytes move + 2 bytes weight + 4 bytes learn
-    
+
     private final List<BookEntry> entries;
     private final Random random;
-    
+
     public static class BookEntry {
         public final long key;
-        public final int move; // Encoded as: from | (to << 6) | (promotion << 12)
+        public final int move; // Encoded as: to | (from << 6) | (promotion << 12)
         public final int weight;
-        
+
         public BookEntry(long key, int move, int weight) {
             this.key = key;
             this.move = move;
             this.weight = weight;
         }
-        
+
         public int getFromSquare() {
-            return move & 0x3F;
-        }
-        
-        public int getToSquare() {
             return (move >> 6) & 0x3F;
         }
-        
+
+        public int getToSquare() {
+            return move & 0x3F;
+        }
+
         public int getPromotion() {
             return (move >> 12) & 0x7;
         }
     }
-    
+
     /**
      * Load a polyglot book from classpath resources.
      */
@@ -79,58 +79,62 @@ public class PolyglotBook {
             }
         }
     }
-    
+
     /**
      * Find all book moves for a given position.
      */
     public List<BookEntry> findMoves(long zobristHash) {
         List<BookEntry> moves = new ArrayList<>();
-        
+
         for (BookEntry entry : entries) {
             if (entry.key == zobristHash) {
                 moves.add(entry);
             }
         }
-        
+
         return moves;
     }
-    
+
+    public BookEntry getBestMove(String fen) {
+        return getBestMove(ZobristHasher.getZobristKey(fen));
+    }
+
     /**
      * Get the best book move for a position (weighted random selection).
      */
     public BookEntry getBestMove(long zobristHash) {
         List<BookEntry> moves = findMoves(zobristHash);
-        
+
         if (moves.isEmpty()) {
             return null;
         }
-        
+
         // Calculate total weight
         int totalWeight = 0;
         for (BookEntry entry : moves) {
             totalWeight += entry.weight;
         }
-        
+
         if (totalWeight == 0) {
             // If all weights are zero, pick randomly
             return moves.get(random.nextInt(moves.size()));
         }
-        
+
         // Weighted random selection
         int randomValue = random.nextInt(totalWeight);
         int cumulative = 0;
-        
+
         for (BookEntry entry : moves) {
             cumulative += entry.weight;
             if (randomValue < cumulative) {
                 return entry;
             }
         }
-        
+
         // Fallback (shouldn't reach here)
-        return moves.get(moves.size() - 1);
+        return moves.getLast();
     }
-    
+
     /**
      * Convert polyglot move to Long Algebraic Notation (LAN).
      */
@@ -138,13 +142,13 @@ public class PolyglotBook {
         int from = entry.getFromSquare();
         int to = entry.getToSquare();
         int promotion = entry.getPromotion();
-        
+
         String fromStr = squareToString(from);
         String toStr = squareToString(to);
-        
+
         StringBuilder lan = new StringBuilder();
         lan.append(fromStr).append(toStr);
-        
+
         // Add promotion piece if present
         if (promotion > 0) {
             char promoChar = switch (promotion) {
@@ -156,23 +160,23 @@ public class PolyglotBook {
             };
             lan.append(promoChar);
         }
-        
+
         return lan.toString();
     }
-    
+
     /**
      * Convert square index (0-63) to algebraic notation (e.g., "e2").
      */
     private static String squareToString(int square) {
         int file = square % 8;
         int rank = square / 8;
-        
+
         char fileChar = (char) ('a' + file);
         char rankChar = (char) ('1' + rank);
-        
+
         return "" + fileChar + rankChar;
     }
-    
+
     public int size() {
         return entries.size();
     }

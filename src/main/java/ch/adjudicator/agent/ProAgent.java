@@ -1,6 +1,5 @@
 package ch.adjudicator.agent;
 
-import ch.adjudicator.agent.engine.BitBoard;
 import ch.adjudicator.agent.engine.PolyglotBook;
 import ch.adjudicator.agent.engine.Search;
 import ch.adjudicator.agent.engine.TimeManager;
@@ -118,18 +117,17 @@ public class ProAgent implements Agent {
             }
 
             try {
-                BitBoard fastBoard = new BitBoard(board);
-                long zobristHash = fastBoard.getZobristHash();
-                
+                String fen = board.getFen();
+
                 PolyglotBook.BookEntry bookMove = null;
                 
                 if (primaryBook != null) {
-                    bookMove = primaryBook.getBestMove(zobristHash);
+                    bookMove = primaryBook.getBestMove(fen);
                 }
                 
                 if (bookMove == null && secondaryBook != null) {
                      LOGGER.info("[{}] No move in primary book, trying secondary...", name);
-                     bookMove = secondaryBook.getBestMove(zobristHash);
+                     bookMove = secondaryBook.getBestMove(fen);
                 }
                 
                 if (bookMove != null) {
@@ -150,6 +148,16 @@ public class ProAgent implements Agent {
             } catch (Exception e) {
                 LOGGER.warn("[{}] Book lookup failed: {}", name, e.getMessage());
             }
+        }
+
+        // Optimize memory after move 15 by clearing opening books
+        if (moveCount == 15) {
+            LOGGER.info("[{}] Move 15 reached, clearing opening books to free memory", name);
+            bookGm2600 = null;
+            bookPerfect = null;
+            bookCerebellum = null;
+            System.gc();
+            LOGGER.info("[{}] Opening books cleared and GC requested", name);
         }
         
         // 2. If not in book, use search
@@ -183,8 +191,7 @@ public class ProAgent implements Agent {
         
         // Start pondering (only if CPU temperature is safe)
         if (temperatureMonitor == null || temperatureMonitor.isSafeForPondering()) {
-            BitBoard fastBoard = new BitBoard(board);
-            long zobristHash = fastBoard.getZobristHash();
+            long zobristHash = board.getZobristKey();
             Move ponderMove = transpositionTable.getBestMove(zobristHash);
             
             if (ponderMove != null) {
