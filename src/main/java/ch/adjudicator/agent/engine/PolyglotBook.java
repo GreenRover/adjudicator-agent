@@ -1,5 +1,7 @@
 package ch.adjudicator.agent.engine;
 
+import com.github.bhlangonijr.chesslib.Board;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -93,6 +95,10 @@ public class PolyglotBook {
         }
 
         return moves;
+    }
+
+    public BookEntry getBestMove(Board board) {
+        return getBestMove(ZobristHasher.getZobristKey(board));
     }
 
     public BookEntry getBestMove(String fen) {

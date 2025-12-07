@@ -7,6 +7,7 @@ import ch.adjudicator.agent.engine.TranspositionTable;
 import ch.adjudicator.client.*;
 import com.github.bhlangonijr.chesslib.Board;
 import com.github.bhlangonijr.chesslib.move.Move;
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +17,7 @@ import java.util.List;
  * High-performance native chess agent capable of defeating chess masters.
  * Uses bitboard engine, opening book, alpha-beta search, and time management.
  */
+@SuppressWarnings("DuplicatedCode")
 public class ProAgent implements Agent {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProAgent.class);
     
@@ -27,12 +29,12 @@ public class ProAgent implements Agent {
     private Color myColor;
     private TimeManager timeManager;
     private int moveCount;
-    private int incrementMs;
+    @Getter
     private boolean lastMoveFromBook;
-    private TranspositionTable transpositionTable;
+    private final TranspositionTable transpositionTable;
     private Search ponderSearch;
     private Thread ponderThread;
-    private CpuTemperatureMonitor temperatureMonitor;
+    private final CpuTemperatureMonitor temperatureMonitor;
     
     public ProAgent(String name, boolean monitorCpuTemp) {
         this.name = name;
@@ -100,12 +102,13 @@ public class ProAgent implements Agent {
         lastMoveFromBook = false;
         
         // 1. Try opening book first
-        if (selectedMove == null && moveCount <= 15) {
+        if (moveCount <= 15) {
             // Determine color if not set (fallback)
             if (myColor == null) {
                 myColor = request.getOpponentMove().isEmpty() ? Color.WHITE : Color.BLACK;
             }
 
+            @SuppressWarnings("UnusedAssignment")
             PolyglotBook primaryBook = null;
             PolyglotBook secondaryBook = null;
 
@@ -117,17 +120,15 @@ public class ProAgent implements Agent {
             }
 
             try {
-                String fen = board.getFen();
-
                 PolyglotBook.BookEntry bookMove = null;
                 
                 if (primaryBook != null) {
-                    bookMove = primaryBook.getBestMove(fen);
+                    bookMove = primaryBook.getBestMove(board);
                 }
                 
                 if (bookMove == null && secondaryBook != null) {
                      LOGGER.info("[{}] No move in primary book, trying secondary...", name);
-                     bookMove = secondaryBook.getBestMove(fen);
+                     bookMove = secondaryBook.getBestMove(board);
                 }
                 
                 if (bookMove != null) {
@@ -179,7 +180,7 @@ public class ProAgent implements Agent {
             if (selectedMove == null) {
                 // Fallback: pick first legal move
                 LOGGER.warn("[{}] Search returned null, using fallback", name);
-                selectedMove = legalMoves.get(0);
+                selectedMove = legalMoves.getFirst();
             }
         }
         
@@ -230,7 +231,7 @@ public class ProAgent implements Agent {
         // Reset game state
         board = new Board();
         moveCount = 0;
-        incrementMs = info.getIncrementMs();
+        int incrementMs = info.getIncrementMs();
         timeManager = new TimeManager(incrementMs);
         
         // Clear transposition table for new game
@@ -285,11 +286,7 @@ public class ProAgent implements Agent {
     private String moveToLAN(Move move) {
         return move.toString().toLowerCase();
     }
-    
-    public boolean isLastMoveFromBook() {
-        return lastMoveFromBook;
-    }
-    
+
     private void stopPondering() {
         if (ponderSearch != null) {
             ponderSearch.stop();
