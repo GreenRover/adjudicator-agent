@@ -173,10 +173,7 @@ public class StaticExchangeEvaluator {
             valCaptured = valAttacker;
             
             long lvaBit = getLeastValuableAttacker(bs, to, side, occupied);
-            // DEBUG
-            if (to == 28 || to == 40) {
-                 System.out.println("Depth " + d + " toSq=" + to + " side=" + side + " lvaBit=" + lvaBit);
-            }
+
             if (lvaBit == 0) break;
             
             // Identify the attacker piece
@@ -203,7 +200,6 @@ public class StaticExchangeEvaluator {
         // Propagate
         while (--d > 0) {
             gain[d-1] = -Math.max(-gain[d-1], gain[d]);
-            System.out.println("Backprop d=" + d + " gain=" + gain[d-1]);
         }
         
         return gain[0];

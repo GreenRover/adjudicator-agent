@@ -13,13 +13,34 @@ public class Evaluator {
     private static final int QUEEN_VALUE = 900;
     
     // Castling bonuses
-    private static final int CASTLING_RIGHT_BONUS = 45;
-    private static final int HAS_CASTLED_BONUS = 50;
+    private static final int MG_CASTLING_RIGHT_BONUS = 45;
+    private static final int EG_CASTLING_RIGHT_BONUS = 0;
+    
+    private static final int MG_HAS_CASTLED_BONUS = 50;
+    private static final int EG_HAS_CASTLED_BONUS = 0;
     
     // Pawn Structure
-    private static final int ISOLATED_PAWN_PENALTY = -10;
-    private static final int DOUBLED_PAWN_PENALTY = -10;
-    private static final int[] PASSED_PAWN_BONUS = {0, 10, 20, 40, 80, 160, 240, 0}; 
+    private static final int MG_ISOLATED_PAWN_PENALTY = -10;
+    private static final int EG_ISOLATED_PAWN_PENALTY = -20; 
+    
+    private static final int MG_DOUBLED_PAWN_PENALTY = -10;
+    private static final int EG_DOUBLED_PAWN_PENALTY = -20;
+
+    // Passed Pawn Bonus: {Rank 0..7}
+    private static final int[] MG_PASSED_PAWN_BONUS = {0, 5, 10, 20, 35, 60, 100, 0}; 
+    private static final int[] EG_PASSED_PAWN_BONUS = {0, 10, 20, 40, 80, 160, 240, 0};
+
+    // Mobility
+    private static final int MG_MOBILITY_WEIGHT = 10;
+    private static final int EG_MOBILITY_WEIGHT = 10;
+    
+    // Centrality
+    private static final int MG_CENTRALITY_BONUS = 15;
+    private static final int EG_CENTRALITY_BONUS = 10;
+
+    // Blocking (King safety) - mostly MG
+    private static final int MG_BLOCKING_PENALTY = 50;
+    private static final int EG_BLOCKING_PENALTY = 0;
 
     private static final long[] FILE_MASKS = {
         0x0101010101010101L, 0x0202020202020202L, 0x0404040404040404L, 0x0808080808080808L,
@@ -166,10 +187,6 @@ public class Evaluator {
         -53, -34, -21, -11, -28, -14, -24, -43
     };
     
-    // Mobility and Blocking constants
-    private static final int MOBILITY_WEIGHT = 10;
-    private static final int CENTRALITY_BONUS = 15;
-    private static final int BLOCKING_PENALTY = 50;
     
     private static final long[] KNIGHT_MOVES = new long[64];
     
@@ -200,58 +217,75 @@ public class Evaluator {
      * Positive score = white is better, negative = black is better.
      */
     public static int evaluate(BoardStatus board) {
-        int mgScore = 0;
-        int egScore = 0;
+        // MG score in upper 32 bits, EG score in lower 32 bits
+        long whiteScore = 0;
+        long blackScore = 0;
         
         // Calculate phase based on material (0 = endgame, 256 = opening)
         int phase = calculatePhase(board);
         
         // Evaluate white pieces
-        mgScore += evaluatePieces(board, true, true);
-        egScore += evaluatePieces(board, true, false);
-        mgScore += evaluateCastling(board, true);
-        mgScore += evaluateMobility(board, true);
-        mgScore += evaluateBlocking(board, true);
+        whiteScore = add(whiteScore, evaluatePieces(board, true));
+        whiteScore = add(whiteScore, evaluateCastling(board, true));
+        whiteScore = add(whiteScore, evaluateMobility(board, true));
+        whiteScore = add(whiteScore, evaluateBlocking(board, true));
+        whiteScore = add(whiteScore, evaluatePawnStructure(board, true));
         
         // Evaluate black pieces
-        mgScore -= evaluatePieces(board, false, true);
-        egScore -= evaluatePieces(board, false, false);
-        mgScore -= evaluateCastling(board, false);
-        mgScore -= evaluateMobility(board, false);
-        mgScore -= evaluateBlocking(board, false);
+        blackScore = add(blackScore, evaluatePieces(board, false));
+        blackScore = add(blackScore, evaluateCastling(board, false));
+        blackScore = add(blackScore, evaluateMobility(board, false));
+        blackScore = add(blackScore, evaluateBlocking(board, false));
+        blackScore = add(blackScore, evaluatePawnStructure(board, false));
+        
+        int mgScore = unpackMg(whiteScore) - unpackMg(blackScore);
+        int egScore = unpackEg(whiteScore) - unpackEg(blackScore);
         
         // Interpolate between middlegame and endgame scores
+        // Formula: (mg * phase + eg * (256 - phase)) / 256
         int score = (mgScore * phase + egScore * (256 - phase)) / 256;
         
-        score += evaluatePawnStructure(board);
-
         return board.isWhiteToMove() ? score : -score;
     }
 
     /**
      * Evaluate castling rights and status.
      */
-    private static int evaluateCastling(BoardStatus board, boolean white) {
-        int score = 0;
+    private static long evaluateCastling(BoardStatus board, boolean white) {
+        int mgScore = 0;
+        int egScore = 0;
+        
         boolean kRight = white ? board.isWhiteCastleKingSide() : board.isBlackCastleKingSide();
         boolean qRight = white ? board.isWhiteCastleQueenSide() : board.isBlackCastleQueenSide();
         long king = white ? board.getWhiteKing() : board.getBlackKing();
 
         // Castling rights bonus
-        if (kRight) score += CASTLING_RIGHT_BONUS;
-        if (qRight) score += CASTLING_RIGHT_BONUS;
+        if (kRight) {
+            mgScore += MG_CASTLING_RIGHT_BONUS;
+            egScore += EG_CASTLING_RIGHT_BONUS;
+        }
+        if (qRight) {
+            mgScore += MG_CASTLING_RIGHT_BONUS;
+            egScore += EG_CASTLING_RIGHT_BONUS;
+        }
 
         // Has castled bonus (approximate)
         if (!kRight && !qRight) {
             // Check if king is on castled squares
             int kingSq = Long.numberOfTrailingZeros(king);
             if (white) {
-                if (kingSq == 6 || kingSq == 2) score += HAS_CASTLED_BONUS; // g1=6, c1=2
+                if (kingSq == 6 || kingSq == 2) {
+                    mgScore += MG_HAS_CASTLED_BONUS;
+                    egScore += EG_HAS_CASTLED_BONUS;
+                }
             } else {
-                if (kingSq == 62 || kingSq == 58) score += HAS_CASTLED_BONUS; // g8=62, c8=58
+                if (kingSq == 62 || kingSq == 58) {
+                    mgScore += MG_HAS_CASTLED_BONUS;
+                    egScore += EG_HAS_CASTLED_BONUS;
+                }
             }
         }
-        return score;
+        return pack(mgScore, egScore);
     }
     
     /**
@@ -272,8 +306,8 @@ public class Evaluator {
     /**
      * Evaluate all pieces of one color.
      */
-    private static int evaluatePieces(BoardStatus board, boolean white, boolean middlegame) {
-        int score = 0;
+    private static long evaluatePieces(BoardStatus board, boolean white) {
+        long totalScore = 0;
         
         long pawns = white ? board.getWhitePawns() : board.getBlackPawns();
         long knights = white ? board.getWhiteKnights() : board.getBlackKnights();
@@ -281,47 +315,51 @@ public class Evaluator {
         long rooks = white ? board.getWhiteRooks() : board.getBlackRooks();
         long queens = white ? board.getWhiteQueens() : board.getBlackQueens();
         
-        score += evaluatePieceType(pawns, PAWN_VALUE, white, middlegame ? MG_PAWN_TABLE : EG_PAWN_TABLE);
-        score += evaluatePieceType(knights, KNIGHT_VALUE, white, middlegame ? MG_KNIGHT_TABLE : EG_KNIGHT_TABLE);
-        score += evaluatePieceType(bishops, BISHOP_VALUE, white, middlegame ? MG_BISHOP_TABLE : EG_BISHOP_TABLE);
-        score += evaluatePieceType(rooks, ROOK_VALUE, white, middlegame ? MG_ROOK_TABLE : EG_ROOK_TABLE);
-        score += evaluatePieceType(queens, QUEEN_VALUE, white, middlegame ? MG_QUEEN_TABLE : EG_QUEEN_TABLE);
+        totalScore = add(totalScore, evaluatePieceType(pawns, PAWN_VALUE, white, MG_PAWN_TABLE, EG_PAWN_TABLE));
+        totalScore = add(totalScore, evaluatePieceType(knights, KNIGHT_VALUE, white, MG_KNIGHT_TABLE, EG_KNIGHT_TABLE));
+        totalScore = add(totalScore, evaluatePieceType(bishops, BISHOP_VALUE, white, MG_BISHOP_TABLE, EG_BISHOP_TABLE));
+        totalScore = add(totalScore, evaluatePieceType(rooks, ROOK_VALUE, white, MG_ROOK_TABLE, EG_ROOK_TABLE));
+        totalScore = add(totalScore, evaluatePieceType(queens, QUEEN_VALUE, white, MG_QUEEN_TABLE, EG_QUEEN_TABLE));
         
         // King position evaluation
         long king = white ? board.getWhiteKing() : board.getBlackKing();
         if (king != 0) {
             int square = Long.numberOfTrailingZeros(king);
             int tableSquare = white ? (square ^ 56) : square; // Flip for white
-            score += middlegame ? MG_KING_TABLE[tableSquare] : EG_KING_TABLE[tableSquare];
+            totalScore = add(totalScore, pack(MG_KING_TABLE[tableSquare], EG_KING_TABLE[tableSquare]));
         }
         
-        return score;
+        return totalScore;
     }
     
     /**
      * Evaluate a specific piece type.
      */
-    private static int evaluatePieceType(long bitboard, int value, boolean white, int[] table) {
-        int score = 0;
+    private static long evaluatePieceType(long bitboard, int value, boolean white, int[] mgTable, int[] egTable) {
+        int mgScore = 0;
+        int egScore = 0;
         
         while (bitboard != 0) {
             int square = Long.numberOfTrailingZeros(bitboard);
             int tableSquare = white ? (square ^ 56) : square; // Flip rank for white (Table is R8->R1)
             
-            score += value + table[tableSquare];
+            mgScore += value + mgTable[tableSquare];
+            egScore += value + egTable[tableSquare];
             
             bitboard &= bitboard - 1; // Clear the lowest set bit
         }
         
-        return score;
+        return pack(mgScore, egScore);
     }
 
     private static int popCount(long bitboard) {
         return Long.bitCount(bitboard);
     }
 
-    private static int evaluateBlocking(BoardStatus board, boolean white) {
-        int score = 0;
+    private static long evaluateBlocking(BoardStatus board, boolean white) {
+        int mgScore = 0;
+        int egScore = 0;
+        
         long king = white ? board.getWhiteKing() : board.getBlackKing();
         long pieces = white ? (board.getWhitePawns() | board.getWhiteKnights() | board.getWhiteBishops() | board.getWhiteRooks() | board.getWhiteQueens())
                             : (board.getBlackPawns() | board.getBlackKnights() | board.getBlackBishops() | board.getBlackRooks() | board.getBlackQueens());
@@ -332,7 +370,8 @@ public class Evaluator {
             if ((king & (1L << 12)) != 0) {
                 // Check if own pieces are on d1 (3) or f1 (5)
                 if ((pieces & (1L << 3)) != 0 || (pieces & (1L << 5)) != 0) {
-                    score -= BLOCKING_PENALTY;
+                    mgScore -= MG_BLOCKING_PENALTY;
+                    egScore -= EG_BLOCKING_PENALTY;
                 }
             }
         } else {
@@ -340,15 +379,18 @@ public class Evaluator {
             if ((king & (1L << 52)) != 0) {
                 // Check if own pieces are on d8 (59) or f8 (61)
                 if ((pieces & (1L << 59)) != 0 || (pieces & (1L << 61)) != 0) {
-                    score -= BLOCKING_PENALTY;
+                    mgScore -= MG_BLOCKING_PENALTY;
+                    egScore -= EG_BLOCKING_PENALTY;
                 }
             }
         }
-        return score;
+        return pack(mgScore, egScore);
     }
 
-    private static int evaluateMobility(BoardStatus board, boolean white) {
-        int score = 0;
+    private static long evaluateMobility(BoardStatus board, boolean white) {
+        int mgScore = 0;
+        int egScore = 0;
+        
         long ownPieces = white ? (board.getWhitePawns() | board.getWhiteKnights() | board.getWhiteBishops() | board.getWhiteRooks() | board.getWhiteQueens() | board.getWhiteKing())
                                : (board.getBlackPawns() | board.getBlackKnights() | board.getBlackBishops() | board.getBlackRooks() | board.getBlackQueens() | board.getBlackKing());
         
@@ -357,52 +399,28 @@ public class Evaluator {
         while (knights != 0) {
             int sq = Long.numberOfTrailingZeros(knights);
             long attacks = KNIGHT_MOVES[sq] & ~ownPieces;
-            score += popCount(attacks) * MOBILITY_WEIGHT;
+            int moves = popCount(attacks);
+            
+            mgScore += moves * MG_MOBILITY_WEIGHT;
+            egScore += moves * EG_MOBILITY_WEIGHT;
+            
             knights &= knights - 1;
         }
 
         // Bishops/Rooks Centrality
-        // Squares: d4(27), e4(28), d5(35), e5(36)
-        // We give bonus if the piece controls any of these.
-        // Simplified: Check if piece is on a line that intersects center.
-        
         long rooks = white ? board.getWhiteRooks() : board.getBlackRooks();
         while (rooks != 0) {
             int sq = Long.numberOfTrailingZeros(rooks);
             int rank = sq / 8;
             int file = sq % 8;
             
-            // d=3, e=4. Rank 4=3, Rank 5=4.
             if (file == 3 || file == 4 || rank == 3 || rank == 4) {
-                 // Counts how many center squares it theoretically controls
-                 // If on d-file, it controls d4 and d5 (2 squares)
-                 // If on Rank 4, it controls d4 and e4 (2 squares)
-                 // If on d4, it controls d4, d5, e4 (Wait, intersection?)
-                 // Let's just give fixed bonus for "Centrality" if it attacks ANY center square?
-                 // "Give a small bonus for distinct squares controlled"
+                 int centerBonus = 0;
+                 if (file == 3 || file == 4) centerBonus++;
+                 if (rank == 3 || rank == 4) centerBonus++;
                  
-                 int controlled = 0;
-                 if (file == 3) controlled += 2; // d4, d5
-                 if (file == 4) controlled += 2; // e4, e5
-                 if (rank == 3) controlled += 2; // d4, e4
-                 if (rank == 4) controlled += 2; // d5, e5
-                 
-                 // If on d4 (file 3, rank 3): 2 + 2 = 4. Correct (d4, d5, d4, e4). d4 counted twice?
-                 // "distinct squares".
-                 // d4 controls: d4(self?), d5, e4...
-                 // Actually, "control" usually means attacking. You don't attack your own square.
-                 // But for this proxy, let's keep it simple.
-                 // If on d-file, attacks d4, d5.
-                 // If on rank 4, attacks d4, e4.
-                 
-                 // Let's count explicitly.
-                 boolean hitsD4 = (file == 3 || rank == 3);
-                 boolean hitsE4 = (file == 4 || rank == 3);
-                 boolean hitsD5 = (file == 3 || rank == 4);
-                 boolean hitsE5 = (file == 4 || rank == 4);
-                 
-                 int distinct = (hitsD4 ? 1 : 0) + (hitsE4 ? 1 : 0) + (hitsD5 ? 1 : 0) + (hitsE5 ? 1 : 0);
-                 score += distinct * CENTRALITY_BONUS;
+                 mgScore += centerBonus * MG_CENTRALITY_BONUS;
+                 egScore += centerBonus * EG_CENTRALITY_BONUS;
             }
             rooks &= rooks - 1;
         }
@@ -413,115 +431,102 @@ public class Evaluator {
             int r = sq / 8;
             int c = sq % 8;
             
-            // Diagonals:
-            // Main: r - c = const. Anti: r + c = const.
-            // d4(3,3): r-c=0, r+c=6.
-            // e4(3,4): r-c=-1, r+c=7.
-            // d5(4,3): r-c=1, r+c=7.
-            // e5(4,4): r-c=0, r+c=8.
-            
             boolean hitsD4 = (r - c == 0) || (r + c == 6);
             boolean hitsE4 = (r - c == -1) || (r + c == 7);
             boolean hitsD5 = (r - c == 1) || (r + c == 7);
             boolean hitsE5 = (r - c == 0) || (r + c == 8);
             
             int distinct = (hitsD4 ? 1 : 0) + (hitsE4 ? 1 : 0) + (hitsD5 ? 1 : 0) + (hitsE5 ? 1 : 0);
-            score += distinct * CENTRALITY_BONUS;
+            
+            mgScore += distinct * MG_CENTRALITY_BONUS;
+            egScore += distinct * EG_CENTRALITY_BONUS;
 
             bishops &= bishops - 1;
         }
         
-        // Queens? Not requested, but usually Queens have mobility too.
-        // Plan says "Bishops/Rooks: ...". It doesn't explicitly exclude Queens but usually Queens are handled similarly or separately.
-        // I'll stick to Knights and Bishops/Rooks as requested.
-        
-        return score;
+        return pack(mgScore, egScore);
     }
 
-    private static int evaluatePawnStructure(BoardStatus board) {
-        int score = 0;
-        long whitePawns = board.getWhitePawns();
-        long blackPawns = board.getBlackPawns();
+    private static long evaluatePawnStructure(BoardStatus board, boolean white) {
+        int mgScore = 0;
+        int egScore = 0;
         
-        // White Pawns
+        long myPawns = white ? board.getWhitePawns() : board.getBlackPawns();
+        long enemyPawns = white ? board.getBlackPawns() : board.getWhitePawns();
+        
+        // Pawn Structure
         for (int file = 0; file < 8; file++) {
             long fileMask = FILE_MASKS[file];
-            long pawnsInFile = whitePawns & fileMask;
+            long pawnsInFile = myPawns & fileMask;
             
             if (pawnsInFile != 0) {
                 // Doubled
                 if (Long.bitCount(pawnsInFile) > 1) {
-                    score += DOUBLED_PAWN_PENALTY;
+                    mgScore += MG_DOUBLED_PAWN_PENALTY;
+                    egScore += EG_DOUBLED_PAWN_PENALTY;
                 }
                 
                 // Isolated
                 long leftMask = (file > 0) ? FILE_MASKS[file - 1] : 0;
                 long rightMask = (file < 7) ? FILE_MASKS[file + 1] : 0;
-                if (((whitePawns & leftMask) == 0) && ((whitePawns & rightMask) == 0)) {
-                    score += ISOLATED_PAWN_PENALTY;
+                if (((myPawns & leftMask) == 0) && ((myPawns & rightMask) == 0)) {
+                    mgScore += MG_ISOLATED_PAWN_PENALTY;
+                    egScore += EG_ISOLATED_PAWN_PENALTY;
                 }
             }
         }
         
-        // Passed Pawns (White)
-        long tempWhite = whitePawns;
-        while (tempWhite != 0) {
-            int sq = Long.numberOfTrailingZeros(tempWhite);
+        // Passed Pawns
+        long tempPawns = myPawns;
+        while (tempPawns != 0) {
+            int sq = Long.numberOfTrailingZeros(tempPawns);
             int rank = sq / 8;
             int file = sq % 8;
             
             long frontSpan = 0L;
-            for (int r = rank + 1; r < 8; r++) {
-                 frontSpan |= (1L << (r * 8 + file));
-                 if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
-                 if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
-            }
-            
-            if ((frontSpan & blackPawns) == 0) {
-                score += PASSED_PAWN_BONUS[rank];
-            }
-            
-            tempWhite &= tempWhite - 1;
-        }
-
-        // Black Pawns
-        for (int file = 0; file < 8; file++) {
-            long fileMask = FILE_MASKS[file];
-            long pawnsInFile = blackPawns & fileMask;
-            
-            if (pawnsInFile != 0) {
-                if (Long.bitCount(pawnsInFile) > 1) {
-                    score -= DOUBLED_PAWN_PENALTY;
+            if (white) {
+                for (int r = rank + 1; r < 8; r++) {
+                     frontSpan |= (1L << (r * 8 + file));
+                     if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
+                     if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
                 }
-                
-                long leftMask = (file > 0) ? FILE_MASKS[file - 1] : 0;
-                long rightMask = (file < 7) ? FILE_MASKS[file + 1] : 0;
-                if (((blackPawns & leftMask) == 0) && ((blackPawns & rightMask) == 0)) {
-                    score -= ISOLATED_PAWN_PENALTY;
+            } else {
+                for (int r = rank - 1; r >= 0; r--) {
+                     frontSpan |= (1L << (r * 8 + file));
+                     if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
+                     if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
                 }
             }
-        }
-        
-        long tempBlack = blackPawns;
-        while (tempBlack != 0) {
-            int sq = Long.numberOfTrailingZeros(tempBlack);
-            int rank = sq / 8;
-            int file = sq % 8;
             
-            long frontSpan = 0L;
-            for (int r = rank - 1; r >= 0; r--) {
-                 frontSpan |= (1L << (r * 8 + file));
-                 if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
-                 if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
+            if ((frontSpan & enemyPawns) == 0) {
+                int bonusRank = white ? rank : (7 - rank);
+                mgScore += MG_PASSED_PAWN_BONUS[bonusRank];
+                egScore += EG_PASSED_PAWN_BONUS[bonusRank];
             }
             
-            if ((frontSpan & whitePawns) == 0) {
-                score -= PASSED_PAWN_BONUS[7 - rank];
-            }
-            
-            tempBlack &= tempBlack - 1;
+            tempPawns &= tempPawns - 1;
         }
         
-        return score;
+        return pack(mgScore, egScore);
+    }
+    
+    // --- Helper functions for packed scores ---
+    
+    private static long pack(int mg, int eg) {
+        return (((long) mg) << 32) | (eg & 0xFFFFFFFFL);
+    }
+    
+    private static int unpackMg(long score) {
+        return (int) (score >>> 32);
+    }
+    
+    private static int unpackEg(long score) {
+        return (int) score;
+    }
+    
+    private static long add(long score1, long score2) {
+        int mg = unpackMg(score1) + unpackMg(score2);
+        int eg = unpackEg(score1) + unpackEg(score2);
+        return pack(mg, eg);
     }
 }

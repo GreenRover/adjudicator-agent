@@ -37,9 +37,6 @@ public class EvaluatorMobilityTest {
         BoardStatus statusB = new BoardStatus(boardB);
         int scoreB = evaluator.evaluate(statusB);
 
-        System.out.println("Score A (King e2 blocking): " + scoreA);
-        System.out.println("Score B (King e1 normal): " + scoreB);
-
         // We expect Score A to be significantly lower (penalty applied)
         // Since it's white, lower means worse? No, standard eval: Positive is good for White.
         // So Score A should be < Score B.

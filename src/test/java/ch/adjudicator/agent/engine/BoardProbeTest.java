@@ -2,13 +2,10 @@
 package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
-import com.github.bhlangonijr.chesslib.Piece;
-import com.github.bhlangonijr.chesslib.Square;
 
-import com.github.bhlangonijr.chesslib.Bitboard;
 import org.junit.jupiter.api.Test;
 
-public class BoardProbe {
+public class BoardProbeTest {
     @Test
     public void probe() {
         // Bitboard b = new Bitboard(); // Check if exists
