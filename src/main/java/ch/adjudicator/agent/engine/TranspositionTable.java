@@ -5,6 +5,7 @@ import com.github.bhlangonijr.chesslib.move.Move;
 /**
  * Transposition Table for storing previously searched positions.
  * Uses Zobrist hashing to identify positions and stores best moves and scores.
+ * Implements a Two-Tier replacement scheme: Deepest + Always Replace.
  */
 public class TranspositionTable {
     private static final int DEFAULT_SIZE = 1 << 20; // 1 million entries (~40MB)
@@ -42,6 +43,14 @@ public class TranspositionTable {
         public boolean isValid(long key) {
             return this.zobristKey == key;
         }
+
+        public void copyFrom(TTEntry other) {
+            this.zobristKey = other.zobristKey;
+            this.bestMove = other.bestMove;
+            this.score = other.score;
+            this.depth = other.depth;
+            this.flag = other.flag;
+        }
     }
     
     public TranspositionTable() {
@@ -55,33 +64,47 @@ public class TranspositionTable {
             actualSize <<= 1;
         }
         
-        this.table = new TTEntry[actualSize];
+        // Two-Tier: 2 buckets per index, so 2 * actualSize
+        this.table = new TTEntry[actualSize * 2];
         this.sizeMask = actualSize - 1;
         
         // Initialize all entries
-        for (int i = 0; i < actualSize; i++) {
+        for (int i = 0; i < table.length; i++) {
             table[i] = new TTEntry();
         }
     }
     
     /**
      * Get the table index for a zobrist hash.
+     * Returns the base index for the bucket (even number).
      */
     private int getIndex(long zobristHash) {
-        return (int) (zobristHash & sizeMask);
+        return ((int) (zobristHash & sizeMask)) * 2;
     }
     
     /**
      * Store a position in the transposition table.
+     * Two-Tier replacement: Deepest + Always Replace.
      */
     public void store(long zobristHash, Move bestMove, int score, int depth, int flag) {
         int index = getIndex(zobristHash);
-        TTEntry entry = table[index];
+        TTEntry deepEntry = table[index];
+        TTEntry recentEntry = table[index + 1];
         
-        // Replace if: new entry is deeper, or same depth but exact score
-        // Race condition acceptable for performance
-        if (depth >= entry.depth || flag == TTEntry.EXACT) {
-            entry.store(zobristHash, bestMove, score, depth, flag);
+        // Strategy: 
+        // Slot 0 (deepEntry): Keeps the deepest search result seen so far for this bucket.
+        // Slot 1 (recentEntry): Keeps the most recent search result (Always Replace).
+        
+        // If the new entry is deeper than or equal to the deepEntry, it takes the deep slot.
+        // The old deepEntry is demoted to the recentEntry slot (to preserve it if it's different).
+        if (depth >= deepEntry.depth) {
+            if (deepEntry.zobristKey != 0 && deepEntry.zobristKey != zobristHash) {
+                recentEntry.copyFrom(deepEntry);
+            }
+            deepEntry.store(zobristHash, bestMove, score, depth, flag);
+        } else {
+            // Otherwise, it goes to the recent slot (Always Replace)
+            recentEntry.store(zobristHash, bestMove, score, depth, flag);
         }
     }
     
@@ -91,10 +114,21 @@ public class TranspositionTable {
      */
     public TTEntry probe(long zobristHash) {
         int index = getIndex(zobristHash);
-        TTEntry entry = table[index];
+        TTEntry deepEntry = table[index];
+        TTEntry recentEntry = table[index + 1];
         
-        if (entry.isValid(zobristHash)) {
-            return entry;
+        // Check deep entry first
+        if (deepEntry.isValid(zobristHash)) {
+            // Check if recent entry is valid and somehow deeper (rare/collision case)
+             if (recentEntry.isValid(zobristHash) && recentEntry.depth > deepEntry.depth) {
+                return recentEntry;
+            }
+            return deepEntry;
+        }
+        
+        // Check recent entry
+        if (recentEntry.isValid(zobristHash)) {
+            return recentEntry;
         }
         
         return null;
@@ -115,11 +149,15 @@ public class TranspositionTable {
         for (int i = 0; i < table.length; i++) {
             table[i].zobristKey = 0;
             table[i].bestMove = null;
+            table[i].depth = 0;
+            table[i].score = 0;
+            table[i].flag = TTEntry.EXACT;
         }
     }
     
     /**
      * Get the number of entries in the table.
+     * Note: This returns the actual array size (2x capacity).
      */
     public int size() {
         return table.length;

@@ -95,8 +95,8 @@ public class MoveOrdering {
         int from = move.getFrom().ordinal();
         int to = move.getTo().ordinal();
         
-        // Increment by depth squared (deeper searches are more valuable)
-        historyScores[from][to] += depth * depth;
+        // Increment by depth squared * 10 (heavily weight deeper searches)
+        historyScores[from][to] += depth * depth * 10;
         
         // Prevent overflow
         if (historyScores[from][to] > 1000000) {
