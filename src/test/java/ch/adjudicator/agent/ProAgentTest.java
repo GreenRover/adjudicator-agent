@@ -8,7 +8,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
 
 class ProAgentTest {
 
@@ -25,46 +26,46 @@ class ProAgentTest {
     void testFirstMove() throws Exception {
         MoveRequest request = new MoveRequest("", 300000, 300000);
         String move = agent.getMove(request);
-        
+
         assertThat(move, notNullValue());
         assertThat(move.isEmpty(), is(false));
-        
+
         // ProAgent specific openings - checking for valid move format instead of hardcoded list
         // as the agent now uses opening books which might vary
         assertThat("Move " + move + " should be a valid LAN move", move.matches("[a-h][1-8][a-h][1-8][qrbn]?"), is(true));
     }
 
     @Test
-    void testOpeningBookUsage_assertThatForTheFirst15moveAreFromBook() throws Exception {
+    void testOpeningBookUsage_assertThatForTheFirst5moveAreFromBook() throws Exception {
         // This test verifies that moves come from the opening book.
         // Originally designed for Ruy Lopez, but since the agent chooses opening moves randomly (weighted),
         // we cannot guarantee a specific line (e.g. it might play d4 instead of e4).
         // We restrict the test to the first move to ensure the book integration is working
         // without being flaky due to opening choices or limited book depth for rare lines.
-        
+
         // Create a white agent that will respond to our moves
         ProAgent whiteAgent = new ProAgent("WhiteTestBot", false);
         whiteAgent.onGameStart(new GameInfo("test-book-game", Color.WHITE, 300000, 0));
-        
+
         // Define a common opening line (unused beyond first move in this restricted test)
         String[] standardOpening = {
-            "", // White's first move (no opponent move yet)
-            "e7e5" // Black plays e5
+                "", // White's first move (no opponent move yet)
+                "e7e5" // Black plays e5
         };
-        
+
         int moveCount = 0;
-        
+
         // Play the opening moves and verify they come from book
         // Checking only the first move to verify book lookup works.
         for (int i = 0; i < standardOpening.length && moveCount < 1; i++) {
             MoveRequest request = new MoveRequest(standardOpening[i], 300000, 300000);
             String move = whiteAgent.getMove(request);
             moveCount++;
-            
+
             // Verify the move came from the opening book
-            assertThat("Move #" + moveCount + " (White) should be from the opening book", 
-                      whiteAgent.isLastMoveFromBook(), is(true));
-            
+            assertThat("Move #" + moveCount + " (White) should be from the opening book",
+                    whiteAgent.isLastMoveFromBook(), is(true));
+
             // Verify move is valid format
             assertThat(move, notNullValue());
             assertThat(move.matches("[a-h][1-8][a-h][1-8][qrbn]?"), is(true));
@@ -75,19 +76,90 @@ class ProAgentTest {
     void testResponseToOpponentMove() throws Exception {
         MoveRequest request = new MoveRequest("e2e4", 290000, 295000);
         String move = agent.getMove(request);
-        
+
         assertThat(move, notNullValue());
         // Should be a valid response (e.g. e7e5, c7c5, etc.)
         // Basic regex for any move: from square to square, optional promotion
         assertThat(move.matches("[a-h][1-8][a-h][1-8][qrbn]?"), is(true));
     }
+
     @Test
     void checkChessLibHash() {
-         Board board = new Board();
-         // board.getZobristKey(); // checking if this compiles and works
-         long hash = board.getZobristKey();
-         System.out.println("ChessLib Hash: " + Long.toHexString(hash));
-         // assertEquals(0x463b96181691fc9cL, hash, "Hash should match Polyglot start position");
+        Board board = new Board();
+        // board.getZobristKey(); // checking if this compiles and works
+        long hash = board.getZobristKey();
+        System.out.println("ChessLib Hash: " + Long.toHexString(hash));
+        // assertEquals(0x463b96181691fc9cL, hash, "Hash should match Polyglot start position");
+    }
+
+    private boolean checkMapping(String name, long target, boolean blackFirst, boolean interleaved) {
+        PolyglotRandom rand = new PolyglotRandom();
+
+        long[] linearKeys = new long[12 * 64];
+        for (int i = 0; i < 12 * 64; i++) linearKeys[i] = rand.next();
+
+        long[] castlingKeys = new long[16];
+        for (int i = 0; i < 16; i++) castlingKeys[i] = rand.next();
+
+        long[] epKeys = new long[64];
+        for (int i = 0; i < 64; i++) epKeys[i] = rand.next();
+
+        long whiteToMove = rand.next();
+
+        long hash = 0;
+
+        // Pieces: R,N,B,Q,K,B,N,R (rank 0/7) and Pawns (rank 1/6)
+        int PAWN = 0, KNIGHT = 1, BISHOP = 2, ROOK = 3, QUEEN = 4, KING = 5;
+
+        hash ^= getKey(linearKeys, ROOK, 0, 0, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, KNIGHT, 0, 1, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, BISHOP, 0, 2, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, QUEEN, 0, 3, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, KING, 0, 4, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, BISHOP, 0, 5, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, KNIGHT, 0, 6, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, ROOK, 0, 7, blackFirst, interleaved);
+
+        for (int f = 0; f < 8; f++) hash ^= getKey(linearKeys, PAWN, 0, 8 + f, blackFirst, interleaved);
+
+        hash ^= getKey(linearKeys, ROOK, 1, 56, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, KNIGHT, 1, 57, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, BISHOP, 1, 58, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, QUEEN, 1, 59, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, KING, 1, 60, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, BISHOP, 1, 61, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, KNIGHT, 1, 62, blackFirst, interleaved);
+        hash ^= getKey(linearKeys, ROOK, 1, 63, blackFirst, interleaved);
+
+        for (int f = 0; f < 8; f++) hash ^= getKey(linearKeys, PAWN, 1, 48 + f, blackFirst, interleaved);
+
+        hash ^= castlingKeys[15]; // Full rights
+
+        if (hash == target) {
+            System.out.println("MATCH FOUND: " + name);
+            return true;
+        }
+        System.out.println(name + ": " + Long.toHexString(hash));
+        return false;
+    }
+
+    private long getKey(long[] linearKeys, int pieceType, int color, int square, boolean blackFirst, boolean interleaved) {
+        // pieceType: 0..5
+        // color: 0=White, 1=Black
+        int pieceIndex;
+        if (interleaved) {
+            // interleaved w,b or b,w
+            int offset = (color == 1) ? (blackFirst ? 0 : 1) : (blackFirst ? 1 : 0);
+            pieceIndex = pieceType * 2 + offset;
+        } else {
+            // sequential
+            if (blackFirst) {
+                pieceIndex = (color == 1) ? pieceType : (6 + pieceType);
+            } else {
+                pieceIndex = (color == 0) ? pieceType : (6 + pieceType);
+            }
+        }
+        return linearKeys[pieceIndex * 64 + square];
     }
 
     static class PolyglotRandom {
@@ -105,75 +177,5 @@ class ProAgentTest {
             seed = seed * 30903 + 62527;
             return (seed >>> 16) & 0xFFFFL;
         }
-    }
-
-    private boolean checkMapping(String name, long target, boolean blackFirst, boolean interleaved) {
-        PolyglotRandom rand = new PolyglotRandom();
-        
-        long[] linearKeys = new long[12 * 64];
-        for (int i = 0; i < 12 * 64; i++) linearKeys[i] = rand.next();
-
-        long[] castlingKeys = new long[16];
-        for (int i = 0; i < 16; i++) castlingKeys[i] = rand.next();
-        
-        long[] epKeys = new long[64];
-        for (int i = 0; i < 64; i++) epKeys[i] = rand.next();
-        
-        long whiteToMove = rand.next();
-        
-        long hash = 0;
-        
-        // Pieces: R,N,B,Q,K,B,N,R (rank 0/7) and Pawns (rank 1/6)
-        int PAWN=0, KNIGHT=1, BISHOP=2, ROOK=3, QUEEN=4, KING=5;
-        
-        hash ^= getKey(linearKeys, ROOK, 0, 0, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, KNIGHT, 0, 1, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, BISHOP, 0, 2, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, QUEEN, 0, 3, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, KING, 0, 4, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, BISHOP, 0, 5, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, KNIGHT, 0, 6, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, ROOK, 0, 7, blackFirst, interleaved);
-        
-        for (int f=0; f<8; f++) hash ^= getKey(linearKeys, PAWN, 0, 8+f, blackFirst, interleaved);
-        
-        hash ^= getKey(linearKeys, ROOK, 1, 56, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, KNIGHT, 1, 57, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, BISHOP, 1, 58, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, QUEEN, 1, 59, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, KING, 1, 60, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, BISHOP, 1, 61, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, KNIGHT, 1, 62, blackFirst, interleaved);
-        hash ^= getKey(linearKeys, ROOK, 1, 63, blackFirst, interleaved);
-        
-        for (int f=0; f<8; f++) hash ^= getKey(linearKeys, PAWN, 1, 48+f, blackFirst, interleaved);
-        
-        hash ^= castlingKeys[15]; // Full rights
-        
-        if (hash == target) {
-            System.out.println("MATCH FOUND: " + name);
-            return true;
-        }
-        System.out.println(name + ": " + Long.toHexString(hash));
-        return false;
-    }
-    
-    private long getKey(long[] linearKeys, int pieceType, int color, int square, boolean blackFirst, boolean interleaved) {
-        // pieceType: 0..5
-        // color: 0=White, 1=Black
-        int pieceIndex;
-        if (interleaved) {
-             // interleaved w,b or b,w
-             int offset = (color == 1) ? (blackFirst ? 0 : 1) : (blackFirst ? 1 : 0);
-             pieceIndex = pieceType * 2 + offset;
-        } else {
-             // sequential
-             if (blackFirst) {
-                 pieceIndex = (color == 1) ? pieceType : (6 + pieceType);
-             } else {
-                 pieceIndex = (color == 0) ? pieceType : (6 + pieceType);
-             }
-        }
-        return linearKeys[pieceIndex * 64 + square];
     }
 }

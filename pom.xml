@@ -208,16 +208,8 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.5</version>
                 <configuration>
-                    <!-- Skip native tests by default -->
-                    <skipTests>${skip.native.tests}</skipTests>
-                    <!--
-                      Point java.library.path to the *compiled* resources directory
-                      where the native libraries will be for the 'test' phase.
-                      This path (e.g., target/classes/lib/windows-x86_64) is
-                      correctly detected by os-maven-plugin.
-                    -->
-                    <argLine>-Djava.library.path=${project.build.directory}/classes/lib/${os.detected.classifier}
-                    </argLine>
+                    <argLine>-Xms512m -Xmx1500m</argLine>
+                    <parallel>methods</parallel>
                 </configuration>
             </plugin>
 
@@ -244,9 +236,6 @@
                     </execution>
                 </executions>
             </plugin>
-
-            <!-- REMOVED maven-resources-plugin for copying libs, as they are now in src/main/resources -->
-
         </plugins>
     </build>
 </project>

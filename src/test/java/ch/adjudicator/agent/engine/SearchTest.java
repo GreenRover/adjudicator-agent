@@ -2,6 +2,7 @@ package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SearchTest {
@@ -18,7 +19,7 @@ public class SearchTest {
         search1.setEnableNmp(false);
         search1.searchRoot(depth);
         int nodes1 = search1.getNodesSearched();
-        
+
         // With NMP
         Board board2 = new Board();
         board2.loadFromFen(fen);
@@ -27,11 +28,11 @@ public class SearchTest {
         search2.setEnableNmp(true);
         search2.searchRoot(depth);
         int nodes2 = search2.getNodesSearched();
-        
+
         System.out.println("[DEBUG_LOG] Nodes without NMP: " + nodes1);
         System.out.println("[DEBUG_LOG] Nodes with NMP: " + nodes2);
         System.out.println("[DEBUG_LOG] Reduction: " + (100.0 * (nodes1 - nodes2) / nodes1) + "%");
-        
+
         assertTrue(nodes2 < nodes1, "NMP should reduce node count. Got " + nodes2 + " vs " + nodes1);
     }
 
@@ -42,10 +43,10 @@ public class SearchTest {
         board.loadFromFen(fen);
         Search search = new Search(board);
         search.setStopTime(System.currentTimeMillis() + 5000);
-        
+
         // Use findBestMove which runs iterative deepening
         com.github.bhlangonijr.chesslib.move.Move bestMove = search.findBestMove(1000);
-        
+
         assertTrue(bestMove.toString().equals("h5f7"), "Should find mate in 1: Qh5xf7, found: " + bestMove);
     }
 }

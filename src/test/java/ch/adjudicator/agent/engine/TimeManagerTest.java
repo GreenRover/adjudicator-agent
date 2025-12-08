@@ -1,8 +1,9 @@
 package ch.adjudicator.agent.engine;
 
 import org.junit.jupiter.api.Test;
+
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.is;
 
 class TimeManagerTest {
 
@@ -28,12 +29,12 @@ class TimeManagerTest {
         // Limits: Min 100, Max 10000. 899 is within limits.
         // 10% cap: 59950 / 10 = 5995. 899 is within cap.
         long allocated = tm.allocateTime(60000, 5);
-        
+
         // Calculation check
         long available = 60000 - 50;
         long expectedBase = available / 20;
         long expected = (long) (expectedBase * 0.3);
-        
+
         assertThat("Opening moves should use 0.3 multiplier", allocated, is(expected));
     }
 
@@ -46,11 +47,11 @@ class TimeManagerTest {
         // Base = 59950 / 20 = 2997.
         // Multiplied = 2997 * 1.2 = 3596.
         long allocated = tm.allocateTime(60000, 20);
-        
+
         long available = 60000 - 50;
         long expectedBase = available / 20;
         long expected = (long) (expectedBase * 1.2);
-        
+
         assertThat("Middlegame moves should use 1.2 multiplier", allocated, is(expected));
     }
 
@@ -59,11 +60,11 @@ class TimeManagerTest {
         TimeManager tm = new TimeManager(0);
         // Move 40 (Endgame > 30), Multiplier 1.3
         long allocated = tm.allocateTime(60000, 40);
-        
+
         long available = 60000 - 50;
         long expectedBase = available / 20;
         long expected = (long) (expectedBase * 1.3);
-        
+
         assertThat("Endgame moves should use 1.3 multiplier", allocated, is(expected));
     }
 
@@ -77,12 +78,12 @@ class TimeManagerTest {
         // Plus increment/2 = 2997 + 500 = 3497.
         // Multiplied = 3497 * 1.2 = 4196.
         long allocated = tm.allocateTime(60000, 20);
-        
+
         long available = 60000 - 50;
         long base = available / 20;
         base += 1000 / 2;
         long expected = (long) (base * 1.2);
-        
+
         assertThat("Should include increment in calculation", allocated, is(expected));
     }
 
@@ -120,12 +121,12 @@ class TimeManagerTest {
         // Min limit 100. Max 10000.
         // 10% cap = 195. 
         // 116 < 195, so it returns 116. This doesn't trigger the cap.
-        
+
         // Let's try to trigger the cap. We need thinkingTime > available / 10.
         // ThinkingTime is approx available / 20 * multiplier.
         // So multiplier / 20 > 1 / 10 => multiplier > 2.
         // But max multiplier is 1.2. So with 0 increment, we likely won't hit the 10% cap easily unless increment pushes it up.
-        
+
         // Let's use increment.
         // Time 2000ms. Available 1950. 10% = 195.
         // Increment 2000ms. 
@@ -133,7 +134,7 @@ class TimeManagerTest {
         // Multiplier 1.2 -> 1316.
         // Cap is 195.
         // Result should be 195.
-        
+
         tm = new TimeManager(2000);
         long allocated = tm.allocateTime(2000, 20);
         assertThat("Should be capped at 10% of available time", allocated, is(195L));
@@ -146,7 +147,7 @@ class TimeManagerTest {
         // Allocated 100ms.
         // If we check immediately, should be false.
         assertThat(tm.shouldStop(start, 1000), is(false));
-        
+
         // Simulate elapsed time (we can't easily sleep in unit tests without slowing down, 
         // but we can pass a past timestamp).
         long pastStart = start - 2000;
@@ -158,15 +159,15 @@ class TimeManagerTest {
         TimeManager tm = new TimeManager(0);
         assertThat(tm.getSoftLimit(1000), is(850L));
     }
-    
+
     @Test
     void testMoveNumberUpdate() {
         TimeManager tm = new TimeManager(0);
         assertThat(tm.getMoveNumber(), is(1));
-        
+
         tm.allocateTime(10000, 5);
         assertThat(tm.getMoveNumber(), is(5));
-        
+
         tm.setMoveNumber(10);
         assertThat(tm.getMoveNumber(), is(10));
     }

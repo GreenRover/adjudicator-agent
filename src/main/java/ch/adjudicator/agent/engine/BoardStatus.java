@@ -1,10 +1,6 @@
 package ch.adjudicator.agent.engine;
 
-import com.github.bhlangonijr.chesslib.Board;
-import com.github.bhlangonijr.chesslib.CastleRight;
-import com.github.bhlangonijr.chesslib.Piece;
-import com.github.bhlangonijr.chesslib.Side;
-import com.github.bhlangonijr.chesslib.Square;
+import com.github.bhlangonijr.chesslib.*;
 import lombok.Getter;
 
 /**
@@ -59,14 +55,14 @@ public class BoardStatus {
     public BoardStatus(Board board) {
         initFromBoard(board);
     }
-    
+
     /**
      * Default constructor for empty board.
      */
     public BoardStatus() {
         whiteToMove = true;
     }
-    
+
     /**
      * Initialize from chesslib Board.
      */
@@ -78,14 +74,14 @@ public class BoardStatus {
         // Convert board to bitboards
         for (Square sq : Square.values()) {
             if (sq == Square.NONE) continue;
-            
+
             Piece piece = board.getPiece(sq);
             if (piece == Piece.NONE) continue;
-            
+
             int squareIndex = sq.ordinal();
             long bitboard = 1L << squareIndex;
 
-            
+
             switch (piece) {
                 case WHITE_PAWN:
                     whitePawns |= bitboard;

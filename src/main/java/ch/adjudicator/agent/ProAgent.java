@@ -20,10 +20,11 @@ import java.util.List;
 @SuppressWarnings("DuplicatedCode")
 public class ProAgent implements Agent {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProAgent.class);
-    
+
     private final String name;
+    private final TranspositionTable transpositionTable;
+    private final CpuTemperatureMonitor temperatureMonitor;
     private Board board;
-    private PolyglotBook bookGm2600;
     private PolyglotBook bookPerfect;
     private PolyglotBook bookCerebellum;
     private Color myColor;
@@ -31,27 +32,18 @@ public class ProAgent implements Agent {
     private int moveCount;
     @Getter
     private boolean lastMoveFromBook;
-    private final TranspositionTable transpositionTable;
     private Search ponderSearch;
     private Thread ponderThread;
-    private final CpuTemperatureMonitor temperatureMonitor;
-    
+
     public ProAgent(String name, boolean monitorCpuTemp) {
         this.name = name;
         this.board = new Board();
         this.moveCount = 0;
         this.transpositionTable = new TranspositionTable();
         this.temperatureMonitor = monitorCpuTemp ? new CpuTemperatureMonitor() : null;
-        
+
         // Load opening books
         LOGGER.info("[{}] Loading opening books...", name);
-        try {
-            bookGm2600 = new PolyglotBook("/polyglot/gm2600.bin");
-            LOGGER.info("[{}] Loaded gm2600.bin: {} entries", name, bookGm2600.size());
-        } catch (Exception e) {
-            LOGGER.warn("[{}] Failed to load gm2600.bin: {}", name, e.getMessage());
-        }
-
         try {
             bookPerfect = new PolyglotBook("/polyglot/Perfect2023.bin");
             LOGGER.info("[{}] Loaded Perfect2023.bin: {} entries", name, bookPerfect.size());
@@ -66,7 +58,53 @@ public class ProAgent implements Agent {
             LOGGER.warn("[{}] Failed to load Cerebellum3Merge.bin: {}", name, e.getMessage());
         }
     }
-    
+
+    public static void main(String[] args) {
+        AgentConfiguration config = new AgentConfiguration(args);
+
+        try {
+            config.validate();
+        } catch (IllegalArgumentException e) {
+            System.err.println(e.getMessage());
+            System.exit(1);
+        }
+
+        // Parse game mode
+        GameMode mode;
+        try {
+            mode = GameMode.valueOf(config.getMode());
+        } catch (IllegalArgumentException e) {
+            System.err.println("Invalid game mode: " + config.getMode());
+            System.err.println("Valid modes: TRAINING, OPEN, RANKED");
+            System.exit(1);
+            return;
+        }
+
+        LOGGER.info("Starting {} agent...", config.getAgentName());
+        LOGGER.info("Server: {}", config.getServerAddress());
+        LOGGER.info("Mode: {}", config.getMode());
+        LOGGER.info("Time control: {}", config.getTimeControl());
+        LOGGER.info("Protocol: gRPC");
+
+        // Create agent
+        ProAgent agent = new ProAgent(config.getAgentName(), config.isMonitorCpuTemp());
+
+        // Create client and play game
+        AdjudicatorClient client = new AdjudicatorClient(config.getServerAddress(), config.getApiKey(), true);
+
+        // Loop to play multiple games
+        while (true) {
+            try {
+                LOGGER.info("Starting new game...");
+                client.playGame(agent, mode, config.getTimeControl());
+                LOGGER.info("Game finished successfully");
+            } catch (Exception e) {
+                LOGGER.error("Game error", e);
+                System.exit(1);
+            }
+        }
+    }
+
     @Override
     public String getMove(MoveRequest request) throws Exception {
         // Stop pondering
@@ -76,12 +114,11 @@ public class ProAgent implements Agent {
         LOGGER.info("[{}] Move #{} - Time remaining: {}ms", name, moveCount, request.getYourTimeMs());
 
 
-        
         // Update board with opponent's move
         if (!request.getOpponentMove().isEmpty()) {
             String opponentMove = request.getOpponentMove();
             LOGGER.info("[{}] Opponent played: {}", name, opponentMove);
-            
+
             try {
                 Move move = parseMove(opponentMove);
                 board.doMove(move);
@@ -90,17 +127,17 @@ public class ProAgent implements Agent {
                 throw new Exception("Failed to parse opponent move: " + opponentMove);
             }
         }
-        
+
         // Check legal moves
         List<Move> legalMoves = board.legalMoves();
         if (legalMoves.isEmpty()) {
             LOGGER.error("[{}] No legal moves available!", name);
             throw new Exception("No legal moves available");
         }
-        
+
         Move selectedMove = null;
         lastMoveFromBook = false;
-        
+
         // 1. Try opening book first
         if (moveCount <= 15) {
             // Determine color if not set (fallback)
@@ -108,32 +145,16 @@ public class ProAgent implements Agent {
                 myColor = request.getOpponentMove().isEmpty() ? Color.WHITE : Color.BLACK;
             }
 
-            @SuppressWarnings("UnusedAssignment")
-            PolyglotBook primaryBook = null;
-            PolyglotBook secondaryBook = null;
-
-            if (myColor == Color.WHITE) {
-                 primaryBook = bookGm2600;
-            } else {
-                 primaryBook = bookPerfect;
-                 secondaryBook = bookCerebellum;
-            }
-
             try {
                 PolyglotBook.BookEntry bookMove = null;
-                
-                if (primaryBook != null) {
-                    bookMove = primaryBook.getBestMove(board);
+
+                if (bookCerebellum != null) {
+                    bookMove = bookCerebellum.getBestMove(board);
                 }
-                
-                if (bookMove == null && secondaryBook != null) {
-                     LOGGER.info("[{}] No move in primary book, trying secondary...", name);
-                     bookMove = secondaryBook.getBestMove(board);
-                }
-                
+
                 if (bookMove != null) {
                     String bookMoveStr = PolyglotBook.moveToLAN(bookMove);
-                    
+
                     // Verify book move is legal
                     for (Move legal : legalMoves) {
                         if (moveToLAN(legal).equals(bookMoveStr)) {
@@ -154,13 +175,12 @@ public class ProAgent implements Agent {
         // Optimize memory after move 15 by clearing opening books
         if (moveCount == 15) {
             LOGGER.info("[{}] Move 15 reached, clearing opening books to free memory", name);
-            bookGm2600 = null;
             bookPerfect = null;
             bookCerebellum = null;
             System.gc();
             LOGGER.info("[{}] Opening books cleared and GC requested", name);
         }
-        
+
         // 2. If not in book, use search
         if (selectedMove == null) {
             // Allocate time for this move
@@ -172,35 +192,35 @@ public class ProAgent implements Agent {
             Search search = new Search(board, transpositionTable);
             selectedMove = search.findBestMove(allocatedTime);
             long searchTime = System.currentTimeMillis() - searchStart;
-            
-            LOGGER.info("[{}] Search complete: {}ms, {} nodes, move: {}, depth: {}", 
-                name, searchTime, search.getNodesSearched(), 
-                selectedMove != null ? moveToLAN(selectedMove) : "null", search.getDepthReached());
-            
+
+            LOGGER.info("[{}] Search complete: {}ms, {} nodes, move: {}, depth: {}",
+                    name, searchTime, search.getNodesSearched(),
+                    selectedMove != null ? moveToLAN(selectedMove) : "null", search.getDepthReached());
+
             if (selectedMove == null) {
                 // Fallback: pick first legal move
                 LOGGER.warn("[{}] Search returned null, using fallback", name);
                 selectedMove = legalMoves.getFirst();
             }
         }
-        
+
         // Apply move to board
         board.doMove(selectedMove);
-        
+
         String moveStr = moveToLAN(selectedMove);
         LOGGER.info("[{}] Playing: {} (from {} legal moves)", name, moveStr, legalMoves.size());
-        
+
         // Start pondering (only if CPU temperature is safe)
         if (temperatureMonitor == null || temperatureMonitor.isSafeForPondering()) {
             long zobristHash = board.getZobristKey();
             Move ponderMove = transpositionTable.getBestMove(zobristHash);
-            
+
             if (ponderMove != null) {
                 LOGGER.info("[{}] Pondering on {}", name, moveToLAN(ponderMove));
                 Board ponderBoard = new Board();
                 ponderBoard.loadFromFen(board.getFen());
                 ponderBoard.doMove(ponderMove);
-                
+
                 ponderSearch = new Search(ponderBoard, transpositionTable);
                 ponderThread = new Thread(() -> {
                     ponderSearch.findBestMove(36000000L); // 10 hours
@@ -210,10 +230,10 @@ public class ProAgent implements Agent {
         } else {
             LOGGER.info("[{}] Pondering disabled due to high CPU temperature", name);
         }
-        
+
         return moveStr;
     }
-    
+
     @Override
     public void onGameStart(GameInfo info) {
         stopPondering();
@@ -227,17 +247,17 @@ public class ProAgent implements Agent {
         this.myColor = info.getColor();
         LOGGER.info("[{}] Time control: {}ms + {}ms increment",
                 name, info.getInitialTimeMs(), info.getIncrementMs());
-        
+
         // Reset game state
         board = new Board();
         moveCount = 0;
         int incrementMs = info.getIncrementMs();
         timeManager = new TimeManager(incrementMs);
-        
+
         // Clear transposition table for new game
         transpositionTable.clear();
     }
-    
+
     @Override
     public void onGameOver(GameOverInfo info) {
         stopPondering();
@@ -251,7 +271,7 @@ public class ProAgent implements Agent {
             LOGGER.info("[{}] Final PGN:\n{}", name, info.getFinalPgn());
         }
     }
-    
+
     @Override
     public void onError(String message, Throwable cause) {
         stopPondering();
@@ -260,13 +280,13 @@ public class ProAgent implements Agent {
         }
         LOGGER.error("[{}] ERROR: {}", name, message, cause);
     }
-    
+
     /**
      * Parse a move in Long Algebraic Notation (LAN) format.
      */
     private Move parseMove(String lan) {
         String upperLan = lan.toUpperCase();
-        
+
         // Find the move in legal moves that matches
         List<Move> legalMoves = board.legalMoves();
         for (Move move : legalMoves) {
@@ -275,11 +295,11 @@ public class ProAgent implements Agent {
                 return move;
             }
         }
-        
+
         // Fallback: construct move
         return new Move(upperLan, board.getSideToMove());
     }
-    
+
     /**
      * Convert a Move to Long Algebraic Notation (LAN).
      */
@@ -299,52 +319,6 @@ public class ProAgent implements Agent {
             }
             ponderThread = null;
             ponderSearch = null;
-        }
-    }
-    
-    public static void main(String[] args) {
-        AgentConfiguration config = new AgentConfiguration(args);
-        
-        try {
-            config.validate();
-        } catch (IllegalArgumentException e) {
-            System.err.println(e.getMessage());
-            System.exit(1);
-        }
-        
-        // Parse game mode
-        GameMode mode;
-        try {
-            mode = GameMode.valueOf(config.getMode());
-        } catch (IllegalArgumentException e) {
-            System.err.println("Invalid game mode: " + config.getMode());
-            System.err.println("Valid modes: TRAINING, OPEN, RANKED");
-            System.exit(1);
-            return;
-        }
-        
-        LOGGER.info("Starting {} agent...", config.getAgentName());
-        LOGGER.info("Server: {}", config.getServerAddress());
-        LOGGER.info("Mode: {}", config.getMode());
-        LOGGER.info("Time control: {}", config.getTimeControl());
-        LOGGER.info("Protocol: gRPC");
-        
-        // Create agent
-        ProAgent agent = new ProAgent(config.getAgentName(), config.isMonitorCpuTemp());
-        
-        // Create client and play game
-        AdjudicatorClient client = new AdjudicatorClient(config.getServerAddress(), config.getApiKey(), true);
-        
-        // Loop to play multiple games
-        while (true) {
-            try {
-                LOGGER.info("Starting new game...");
-                client.playGame(agent, mode, config.getTimeControl());
-                LOGGER.info("Game finished successfully");
-            } catch (Exception e) {
-                LOGGER.error("Game error", e);
-                System.exit(1);
-            }
         }
     }
 }

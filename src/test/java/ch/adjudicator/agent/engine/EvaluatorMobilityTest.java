@@ -2,6 +2,7 @@ package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
 import org.junit.jupiter.api.Test;
+
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class EvaluatorMobilityTest {
@@ -12,7 +13,7 @@ public class EvaluatorMobilityTest {
 
         // Scenario A: King on e2, Queen on d1, Bishop on f1 (Bad - blocking)
         Board boardA = new Board();
-        boardA.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RN1QKBNR w KQkq - 0 1"); 
+        boardA.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RN1QKBNR w KQkq - 0 1");
         // Note: FEN above is close, let's just construct the specific position to be sure.
         // Actually, FEN is easier.
         // Board A: King e2, Q d1, B f1. Pawns d2, f2, e3? 
@@ -26,7 +27,7 @@ public class EvaluatorMobilityTest {
         // Standard: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
         // Modified A (Blocking): rnbqkbnr/pppppppp/8/8/8/4P3/PPPPKPPP/RNBQ1BNR w kq - 0 1
         // (Moved e2 pawn to e3, King to e2. Q is at d1, B is at f1 (standard start squares)).
-        
+
         boardA.loadFromFen("rnbqkbnr/pppppppp/8/8/8/4P3/PPPPKPPP/RNBQ1BNR w kq - 0 1");
         BoardStatus statusA = new BoardStatus(boardA);
         int scoreA = evaluator.evaluate(statusA);
@@ -42,7 +43,7 @@ public class EvaluatorMobilityTest {
         // So Score A should be < Score B.
         // Actually, standard start is usually 0 or small positive.
         // If we penalize A, it should drop.
-        
+
         assertTrue(scoreA < scoreB - 30, "King blocking own pieces should be penalized significantly. A=" + scoreA + ", B=" + scoreB);
     }
 

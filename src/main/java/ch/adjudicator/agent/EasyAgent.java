@@ -29,6 +29,48 @@ public class EasyAgent implements Agent {
         this.board = new Board();
     }
 
+    public static void main(String[] args) {
+        AgentConfiguration config = new AgentConfiguration(args);
+
+        try {
+            config.validate();
+        } catch (IllegalArgumentException e) {
+            System.err.println(e.getMessage());
+            System.exit(1);
+        }
+
+        // Parse game mode
+        GameMode mode;
+        try {
+            mode = GameMode.valueOf(config.getMode());
+        } catch (IllegalArgumentException e) {
+            System.err.println("Invalid game mode: " + config.getMode());
+            System.err.println("Valid modes: TRAINING, OPEN, RANKED");
+            System.exit(1);
+            return;
+        }
+
+        LOGGER.info("Starting {} agent...", config.getAgentName());
+        LOGGER.info("Server: {}", config.getServerAddress());
+        LOGGER.info("Mode: {}", config.getMode());
+        LOGGER.info("Time control: {}", config.getTimeControl());
+        LOGGER.info("Protocol: gRPC");
+
+        // Create agent
+        EasyAgent agent = new EasyAgent(config.getAgentName());
+
+        // Create client and play game
+        AdjudicatorClient client = new AdjudicatorClient(config.getServerAddress(), config.getApiKey(), true);
+
+        try {
+            client.playGame(agent, mode, config.getTimeControl());
+            LOGGER.info("Agent finished successfully");
+        } catch (Exception e) {
+            LOGGER.error("Game error", e);
+            System.exit(1);
+        }
+    }
+
     @Override
     public String getMove(MoveRequest request) throws Exception {
         LOGGER.info("[{}] My turn! Time remaining: {}ms", name, request.getYourTimeMs());
@@ -125,47 +167,5 @@ public class EasyAgent implements Agent {
      */
     private String moveToLAN(Move move) {
         return move.toString().toLowerCase();
-    }
-
-    public static void main(String[] args) {
-        AgentConfiguration config = new AgentConfiguration(args);
-
-        try {
-            config.validate();
-        } catch (IllegalArgumentException e) {
-            System.err.println(e.getMessage());
-            System.exit(1);
-        }
-
-        // Parse game mode
-        GameMode mode;
-        try {
-            mode = GameMode.valueOf(config.getMode());
-        } catch (IllegalArgumentException e) {
-            System.err.println("Invalid game mode: " + config.getMode());
-            System.err.println("Valid modes: TRAINING, OPEN, RANKED");
-            System.exit(1);
-            return;
-        }
-
-        LOGGER.info("Starting {} agent...", config.getAgentName());
-        LOGGER.info("Server: {}", config.getServerAddress());
-        LOGGER.info("Mode: {}", config.getMode());
-        LOGGER.info("Time control: {}", config.getTimeControl());
-        LOGGER.info("Protocol: gRPC");
-
-        // Create agent
-        EasyAgent agent = new EasyAgent(config.getAgentName());
-
-        // Create client and play game
-        AdjudicatorClient client = new AdjudicatorClient(config.getServerAddress(), config.getApiKey(), true);
-
-        try {
-            client.playGame(agent, mode, config.getTimeControl());
-            LOGGER.info("Agent finished successfully");
-        } catch (Exception e) {
-            LOGGER.error("Game error", e);
-            System.exit(1);
-        }
     }
 }

@@ -1,8 +1,6 @@
 package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
-import com.github.bhlangonijr.chesslib.Square;
-import com.github.bhlangonijr.chesslib.move.Move;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,7 +14,7 @@ public class EvaluatorCastlingTest {
         Board boardWithRights = new Board();
         boardWithRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
         BoardStatus statusWithRights = new BoardStatus(boardWithRights);
-        
+
         // Create a board without castling rights (same position)
         // FEN: Nobody can castle
         Board boardWithoutRights = new Board();
@@ -31,8 +29,8 @@ public class EvaluatorCastlingTest {
 
         // Expectation: Score with rights should be significantly higher
         // Now that we isolated White rights, score should increase by (45*2) = 90
-        assertTrue(scoreWithRights > scoreWithoutRights + 20, 
-            "Position with castling rights should be valued higher than without");
+        assertTrue(scoreWithRights > scoreWithoutRights + 20,
+                "Position with castling rights should be valued higher than without");
     }
 
     @Test
@@ -50,7 +48,7 @@ public class EvaluatorCastlingTest {
         bongcloudBoard.loadFromFen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPPKPPP/RNBQ1BNR w kq - 1 2");
         BoardStatus bongcloudStatus = new BoardStatus(bongcloudBoard);
         int bongcloudScore = Evaluator.evaluate(bongcloudStatus);
-        
+
         System.out.println("Start White Score (Ke1): " + startScore);
         System.out.println("Bongcloud White Score (Ke2): " + bongcloudScore);
 
@@ -59,8 +57,8 @@ public class EvaluatorCastlingTest {
         // Bongcloud: White 0, Black +90. Net -90. King e2 (-8).
         // Net change from Start to Bongcloud: -90 (rights) + 48 (king) = -42.
         // So BongcloudScore should be approx StartScore - 42.
-        
-        assertTrue(bongcloudScore < startScore - 20, 
-            "Position with King on e2 (no castling) should be worse than King on e1 (castling available)");
+
+        assertTrue(bongcloudScore < startScore - 20,
+                "Position with King on e2 (no castling) should be worse than King on e1 (castling available)");
     }
 }

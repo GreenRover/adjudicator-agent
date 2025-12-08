@@ -20,43 +20,11 @@ public class PolyglotBook {
     private final List<BookEntry> entries;
     private final Random random;
 
-    public static class BookEntry {
-        public final long key;
-        public final int move; // Encoded as: to | (from << 6) | (promotion << 12)
-        public final int weight;
-
-        public BookEntry(long key, int move, int weight) {
-            this.key = key;
-            this.move = move;
-            this.weight = weight;
-        }
-
-        public int getFromSquare() {
-            return (move >> 6) & 0x3F;
-        }
-
-        public int getToSquare() {
-            return move & 0x3F;
-        }
-
-        public int getPromotion() {
-            return (move >> 12) & 0x7;
-        }
-    }
-
     /**
      * Load a polyglot book from classpath resources.
      */
     public PolyglotBook(String resourcePath) throws IOException {
         this(openResource(resourcePath));
-    }
-
-    private static InputStream openResource(String resourcePath) throws IOException {
-        InputStream is = PolyglotBook.class.getResourceAsStream(resourcePath);
-        if (is == null) {
-            throw new IOException("Book file not found: " + resourcePath);
-        }
-        return is;
     }
 
     /**
@@ -80,6 +48,56 @@ public class PolyglotBook {
                 entries.add(new BookEntry(key, move, weight));
             }
         }
+    }
+
+    private static InputStream openResource(String resourcePath) throws IOException {
+        InputStream is = PolyglotBook.class.getResourceAsStream(resourcePath);
+        if (is == null) {
+            throw new IOException("Book file not found: " + resourcePath);
+        }
+        return is;
+    }
+
+    /**
+     * Convert polyglot move to Long Algebraic Notation (LAN).
+     */
+    public static String moveToLAN(BookEntry entry) {
+        int from = entry.getFromSquare();
+        int to = entry.getToSquare();
+        int promotion = entry.getPromotion();
+
+        String fromStr = squareToString(from);
+        String toStr = squareToString(to);
+
+        StringBuilder lan = new StringBuilder();
+        lan.append(fromStr).append(toStr);
+
+        // Add promotion piece if present
+        if (promotion > 0) {
+            char promoChar = switch (promotion) {
+                case 1 -> 'n'; // Knight
+                case 2 -> 'b'; // Bishop
+                case 3 -> 'r'; // Rook
+                case 4 -> 'q'; // Queen
+                default -> 'q'; // Default to queen
+            };
+            lan.append(promoChar);
+        }
+
+        return lan.toString();
+    }
+
+    /**
+     * Convert square index (0-63) to algebraic notation (e.g., "e2").
+     */
+    private static String squareToString(int square) {
+        int file = square % 8;
+        int rank = square / 8;
+
+        char fileChar = (char) ('a' + file);
+        char rankChar = (char) ('1' + rank);
+
+        return "" + fileChar + rankChar;
     }
 
     /**
@@ -141,49 +159,31 @@ public class PolyglotBook {
         return moves.getLast();
     }
 
-    /**
-     * Convert polyglot move to Long Algebraic Notation (LAN).
-     */
-    public static String moveToLAN(BookEntry entry) {
-        int from = entry.getFromSquare();
-        int to = entry.getToSquare();
-        int promotion = entry.getPromotion();
-
-        String fromStr = squareToString(from);
-        String toStr = squareToString(to);
-
-        StringBuilder lan = new StringBuilder();
-        lan.append(fromStr).append(toStr);
-
-        // Add promotion piece if present
-        if (promotion > 0) {
-            char promoChar = switch (promotion) {
-                case 1 -> 'n'; // Knight
-                case 2 -> 'b'; // Bishop
-                case 3 -> 'r'; // Rook
-                case 4 -> 'q'; // Queen
-                default -> 'q'; // Default to queen
-            };
-            lan.append(promoChar);
-        }
-
-        return lan.toString();
-    }
-
-    /**
-     * Convert square index (0-63) to algebraic notation (e.g., "e2").
-     */
-    private static String squareToString(int square) {
-        int file = square % 8;
-        int rank = square / 8;
-
-        char fileChar = (char) ('a' + file);
-        char rankChar = (char) ('1' + rank);
-
-        return "" + fileChar + rankChar;
-    }
-
     public int size() {
         return entries.size();
+    }
+
+    public static class BookEntry {
+        public final long key;
+        public final int move; // Encoded as: to | (from << 6) | (promotion << 12)
+        public final int weight;
+
+        public BookEntry(long key, int move, int weight) {
+            this.key = key;
+            this.move = move;
+            this.weight = weight;
+        }
+
+        public int getFromSquare() {
+            return (move >> 6) & 0x3F;
+        }
+
+        public int getToSquare() {
+            return move & 0x3F;
+        }
+
+        public int getPromotion() {
+            return (move >> 12) & 0x7;
+        }
     }
 }

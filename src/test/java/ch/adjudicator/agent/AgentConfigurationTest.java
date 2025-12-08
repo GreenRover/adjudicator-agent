@@ -1,8 +1,9 @@
 package ch.adjudicator.agent;
 
 import org.junit.jupiter.api.Test;
+
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.is;
 
 class AgentConfigurationTest {
 
@@ -20,14 +21,14 @@ class AgentConfigurationTest {
     @Test
     void testCliOverrides() {
         String[] args = {
-            "--server", "localhost:9090",
-            "--key", "secret",
-            "--name", "TestBot",
-            "--mode", "RANKED",
-            "--time", "600+5"
+                "--server", "localhost:9090",
+                "--key", "secret",
+                "--name", "TestBot",
+                "--mode", "RANKED",
+                "--time", "600+5"
         };
         AgentConfiguration config = new AgentConfiguration(args);
-        
+
         assertThat(config.getServerAddress(), is("localhost:9090"));
         assertThat(config.getApiKey(), is("secret"));
         assertThat(config.getAgentName(), is("TestBot"));

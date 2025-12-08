@@ -1,8 +1,6 @@
-
 package ch.adjudicator.agent.engine;
 
 import com.github.bhlangonijr.chesslib.Board;
-
 import org.junit.jupiter.api.Test;
 
 public class BoardProbeTest {
@@ -15,8 +13,7 @@ public class BoardProbeTest {
         } catch (ClassNotFoundException e) {
             System.out.println("Bitboard class NOT found");
         }
-        
-        Board board = new Board();
+
         // Check for bitboard access
         // System.out.println(board.getBitboard(Piece.WHITE_PAWN)); 
         // If the above line compiles, we are good.
