@@ -7,6 +7,7 @@ import com.github.bhlangonijr.chesslib.Square;
 import com.github.bhlangonijr.chesslib.move.Move;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 
 public class Bitboard implements BoardInterface {
@@ -20,6 +21,22 @@ public class Bitboard implements BoardInterface {
     private Square enPassantSquare;
     private int halfMoveClock;
     private int fullMoveNumber;
+    private long zobristHash;
+
+    // History
+    private static final int MAX_GAME_MOVES = 2048;
+
+    private static class StateHistory {
+        public int move;
+        public Piece capturedPiece;
+        public int castlingRights;
+        public Square enPassantSquare;
+        public int halfMoveClock;
+        public long zobristHash;
+    }
+
+    private StateHistory[] history = new StateHistory[MAX_GAME_MOVES];
+    private int historyPly = 0;
 
     // Castling constants
     private static final int CASTLE_WK = 1;
@@ -28,8 +45,11 @@ public class Bitboard implements BoardInterface {
     private static final int CASTLE_BQ = 8;
 
     public Bitboard() {
+        for (int i = 0; i < MAX_GAME_MOVES; i++) {
+            history[i] = new StateHistory();
+        }
         pieces = new long[Piece.values().length];
-        clear();
+        loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
     private void clear() {
@@ -42,6 +62,8 @@ public class Bitboard implements BoardInterface {
         enPassantSquare = Square.NONE;
         halfMoveClock = 0;
         fullMoveNumber = 1;
+        historyPly = 0;
+        zobristHash = 0L;
     }
 
     public void putPiece(Piece piece, Square sq) {
@@ -254,17 +276,305 @@ public class Bitboard implements BoardInterface {
 
     @Override
     public List<Move> legalMoves() {
-        return List.of();
+        int[] moves = new int[256];
+        int count = generateLegalMoves(moves);
+        List<Move> list = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            int m = moves[i];
+            int from = m & 0x3F;
+            int to = (m >> 6) & 0x3F;
+            int promo = (m >> 12) & 7;
+            Piece promoPiece = Piece.NONE;
+            if (promo != 0) {
+                if (sideToMove == Side.WHITE) {
+                    switch (promo) {
+                        case 1 -> promoPiece = Piece.WHITE_KNIGHT;
+                        case 2 -> promoPiece = Piece.WHITE_BISHOP;
+                        case 3 -> promoPiece = Piece.WHITE_ROOK;
+                        case 4 -> promoPiece = Piece.WHITE_QUEEN;
+                    }
+                } else {
+                    switch (promo) {
+                        case 1 -> promoPiece = Piece.BLACK_KNIGHT;
+                        case 2 -> promoPiece = Piece.BLACK_BISHOP;
+                        case 3 -> promoPiece = Piece.BLACK_ROOK;
+                        case 4 -> promoPiece = Piece.BLACK_QUEEN;
+                    }
+                }
+            }
+            list.add(new Move(Square.values()[from], Square.values()[to], promoPiece));
+        }
+        return list;
     }
 
     @Override
     public boolean doMove(Move move) {
-        return false;
+        // Find matching legal move to ensure validity?
+        // For performance, assume valid or encode directly.
+        // We need to encode the move.
+        int from = move.getFrom().ordinal();
+        int to = move.getTo().ordinal();
+        int promo = 0;
+        if (move.getPromotion() != Piece.NONE) {
+            Piece p = move.getPromotion();
+            if (p == Piece.WHITE_KNIGHT || p == Piece.BLACK_KNIGHT) promo = 1;
+            else if (p == Piece.WHITE_BISHOP || p == Piece.BLACK_BISHOP) promo = 2;
+            else if (p == Piece.WHITE_ROOK || p == Piece.BLACK_ROOK) promo = 3;
+            else if (p == Piece.WHITE_QUEEN || p == Piece.BLACK_QUEEN) promo = 4;
+        }
+        int encoded = encodeMove(from, to, promo);
+        makeMove(encoded);
+        return true;
     }
 
     @Override
     public Move undoMove() {
+        if (historyPly > 0) {
+            int move = history[historyPly - 1].move; // Move that was made
+            // Reconstruct Move object
+            int from = move & 0x3F;
+            int to = (move >> 6) & 0x3F;
+            int promo = (move >> 12) & 7;
+            Piece promoPiece = Piece.NONE;
+            // Note: sideToMove is currently the side AFTER the move.
+            // unmakeMove reverts sideToMove.
+            // But here we want to return the move that was just undone (made by the PREVIOUS sideToMove).
+            // So if sideToMove is BLACK, the move was made by WHITE.
+            Side mover = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
+            if (promo != 0) {
+                 if (mover == Side.WHITE) {
+                    switch (promo) {
+                        case 1 -> promoPiece = Piece.WHITE_KNIGHT;
+                        case 2 -> promoPiece = Piece.WHITE_BISHOP;
+                        case 3 -> promoPiece = Piece.WHITE_ROOK;
+                        case 4 -> promoPiece = Piece.WHITE_QUEEN;
+                    }
+                } else {
+                    switch (promo) {
+                        case 1 -> promoPiece = Piece.BLACK_KNIGHT;
+                        case 2 -> promoPiece = Piece.BLACK_BISHOP;
+                        case 3 -> promoPiece = Piece.BLACK_ROOK;
+                        case 4 -> promoPiece = Piece.BLACK_QUEEN;
+                    }
+                }
+            }
+            unmakeMove(move);
+            return new Move(Square.values()[from], Square.values()[to], promoPiece);
+        }
         return null;
+    }
+
+    public void makeMove(int move) {
+        StateHistory state = history[historyPly];
+        state.move = move;
+        state.castlingRights = castlingRights;
+        state.enPassantSquare = enPassantSquare;
+        state.halfMoveClock = halfMoveClock;
+        state.zobristHash = zobristHash;
+
+        int from = move & 0x3F;
+        int to = (move >> 6) & 0x3F;
+        int promo = (move >> 12) & 7;
+        
+        Piece movingPiece = getPiece(Square.values()[from]);
+        Piece capturedPiece = getPiece(Square.values()[to]);
+        
+        boolean isEP = false;
+        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) &&
+            enPassantSquare != Square.NONE && to == enPassantSquare.ordinal()) {
+            isEP = true;
+            capturedPiece = (sideToMove == Side.WHITE) ? Piece.BLACK_PAWN : Piece.WHITE_PAWN;
+        }
+        
+        state.capturedPiece = capturedPiece;
+        historyPly++;
+        
+        removePiece(Square.values()[from]);
+        
+        if (capturedPiece != Piece.NONE) {
+            if (isEP) {
+                int capSq = (sideToMove == Side.WHITE) ? to - 8 : to + 8;
+                removePiece(Square.values()[capSq]);
+            } else {
+                removePiece(Square.values()[to]);
+            }
+        }
+        
+        Piece pieceToPlace = movingPiece;
+        if (promo != 0) {
+            if (sideToMove == Side.WHITE) {
+                switch (promo) {
+                    case 1 -> pieceToPlace = Piece.WHITE_KNIGHT;
+                    case 2 -> pieceToPlace = Piece.WHITE_BISHOP;
+                    case 3 -> pieceToPlace = Piece.WHITE_ROOK;
+                    case 4 -> pieceToPlace = Piece.WHITE_QUEEN;
+                }
+            } else {
+                switch (promo) {
+                    case 1 -> pieceToPlace = Piece.BLACK_KNIGHT;
+                    case 2 -> pieceToPlace = Piece.BLACK_BISHOP;
+                    case 3 -> pieceToPlace = Piece.BLACK_ROOK;
+                    case 4 -> pieceToPlace = Piece.BLACK_QUEEN;
+                }
+            }
+        }
+        putPiece(pieceToPlace, Square.values()[to]);
+        
+        if ((movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
+            if (to > from) { // Kingside
+                int rFrom = from + 3; 
+                int rTo = from + 1;
+                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+                removePiece(Square.values()[rFrom]);
+                putPiece(rook, Square.values()[rTo]);
+            } else { // Queenside
+                int rFrom = from - 4; 
+                int rTo = from - 1;
+                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+                removePiece(Square.values()[rFrom]);
+                putPiece(rook, Square.values()[rTo]);
+            }
+        }
+        
+        if (movingPiece == Piece.WHITE_KING) castlingRights &= ~(CASTLE_WK | CASTLE_WQ);
+        else if (movingPiece == Piece.BLACK_KING) castlingRights &= ~(CASTLE_BK | CASTLE_BQ);
+        
+        if (movingPiece == Piece.WHITE_ROOK) {
+            if (from == 7) castlingRights &= ~CASTLE_WK;
+            if (from == 0) castlingRights &= ~CASTLE_WQ;
+        } else if (movingPiece == Piece.BLACK_ROOK) {
+            if (from == 63) castlingRights &= ~CASTLE_BK;
+            if (from == 56) castlingRights &= ~CASTLE_BQ;
+        }
+        
+        if (capturedPiece == Piece.WHITE_ROOK) {
+             if (to == 7) castlingRights &= ~CASTLE_WK;
+             if (to == 0) castlingRights &= ~CASTLE_WQ;
+        } else if (capturedPiece == Piece.BLACK_ROOK) {
+             if (to == 63) castlingRights &= ~CASTLE_BK;
+             if (to == 56) castlingRights &= ~CASTLE_BQ;
+        }
+        
+        enPassantSquare = Square.NONE;
+        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) && Math.abs(to - from) == 16) {
+            int epIndex = (from + to) / 2;
+            enPassantSquare = Square.values()[epIndex];
+        }
+        
+        if (capturedPiece != Piece.NONE || movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) {
+            halfMoveClock = 0;
+        } else {
+            halfMoveClock++;
+        }
+        
+        if (sideToMove == Side.BLACK) fullMoveNumber++;
+        sideToMove = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
+    }
+    
+    public void unmakeMove(int move) {
+        historyPly--;
+        StateHistory state = history[historyPly];
+
+        castlingRights = state.castlingRights;
+        enPassantSquare = state.enPassantSquare;
+        halfMoveClock = state.halfMoveClock;
+        zobristHash = state.zobristHash;
+        Piece capturedPiece = state.capturedPiece;
+        
+        sideToMove = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
+        if (sideToMove == Side.BLACK) fullMoveNumber--;
+        
+        int from = move & 0x3F;
+        int to = (move >> 6) & 0x3F;
+        int promo = (move >> 12) & 7;
+        
+        Piece movedPiece = getPiece(Square.values()[to]);
+        if (promo != 0) {
+            movedPiece = (sideToMove == Side.WHITE) ? Piece.WHITE_PAWN : Piece.BLACK_PAWN;
+        }
+        
+        removePiece(Square.values()[to]);
+        putPiece(movedPiece, Square.values()[from]);
+        
+        if (capturedPiece != Piece.NONE) {
+             boolean isEP = false;
+             if ((movedPiece == Piece.WHITE_PAWN || movedPiece == Piece.BLACK_PAWN) && 
+                 state.enPassantSquare != Square.NONE &&
+                 to == state.enPassantSquare.ordinal()) {
+                 isEP = true;
+             }
+             if (isEP) {
+                 int capSq = (sideToMove == Side.WHITE) ? to - 8 : to + 8;
+                 putPiece(capturedPiece, Square.values()[capSq]);
+             } else {
+                 putPiece(capturedPiece, Square.values()[to]);
+             }
+        }
+        
+        if ((movedPiece == Piece.WHITE_KING || movedPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
+            if (to > from) { 
+                int rFrom = from + 3; 
+                int rTo = from + 1;   
+                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+                removePiece(Square.values()[rTo]);
+                putPiece(rook, Square.values()[rFrom]);
+            } else { 
+                int rFrom = from - 4; 
+                int rTo = from - 1;   
+                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+                removePiece(Square.values()[rTo]);
+                putPiece(rook, Square.values()[rFrom]);
+            }
+        }
+    }
+    
+    public int generateLegalMoves(int[] moves) {
+        int[] pseudo = new int[256];
+        int count = generatePseudoLegalMoves(pseudo);
+        int legalCount = 0;
+
+        int kingIdx = (sideToMove == Side.WHITE) ? Piece.WHITE_KING.ordinal() : Piece.BLACK_KING.ordinal();
+        long kingBit = pieces[kingIdx];
+        int kingSq = -1;
+        if (kingBit != 0) {
+            kingSq = Long.numberOfTrailingZeros(kingBit);
+        }
+
+        Side us = sideToMove;
+        Side enemy = (us == Side.WHITE) ? Side.BLACK : Side.WHITE;
+
+        for (int i = 0; i < count; i++) {
+            int m = pseudo[i];
+            int from = m & 0x3F;
+            int to = (m >> 6) & 0x3F;
+
+            // Castling Special Case: Check 'from' (current) and 'mid' (path) squares
+            if (kingSq != -1 && from == kingSq && Math.abs(to - from) == 2) {
+                if (isSquareAttacked(from, enemy)) {
+                    continue;
+                }
+                int mid = (from + to) / 2;
+                if (isSquareAttacked(mid, enemy)) {
+                    continue;
+                }
+            }
+
+            makeMove(m);
+
+            // After makeMove, sideToMove is flipped (now it's enemy's turn)
+            // We check if OUR king is attacked by the enemy
+            // Note: Our king might have moved, so we locate it again
+            int myKingIdx = (us == Side.WHITE) ? Piece.WHITE_KING.ordinal() : Piece.BLACK_KING.ordinal();
+            long myKing = pieces[myKingIdx];
+            if (myKing != 0) {
+                int kSq = Long.numberOfTrailingZeros(myKing);
+                if (!isSquareAttacked(kSq, sideToMove)) {
+                    moves[legalCount++] = m;
+                }
+            }
+            unmakeMove(m);
+        }
+        return legalCount;
     }
 
     @Override
@@ -274,12 +584,39 @@ public class Bitboard implements BoardInterface {
 
     @Override
     public boolean isMated() {
+        if (!isKingAttacked()) {
+            return false;
+        }
+        int[] moves = new int[256];
+        int count = generateLegalMoves(moves);
+        return count == 0;
+    }
+
+    public boolean isSquareAttacked(int sq, Side attackerSide) {
+        long occ = occupiedSquares;
+        if (attackerSide == Side.WHITE) {
+            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & pieces[Piece.WHITE_PAWN.ordinal()]) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.WHITE_KNIGHT.ordinal()]) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.WHITE_KING.ordinal()]) != 0) return true;
+            if ((AttackLookups.getBishopAttacks(sq, occ) & (pieces[Piece.WHITE_BISHOP.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()])) != 0) return true;
+            if ((AttackLookups.getRookAttacks(sq, occ) & (pieces[Piece.WHITE_ROOK.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()])) != 0) return true;
+        } else {
+            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & pieces[Piece.BLACK_PAWN.ordinal()]) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.BLACK_KNIGHT.ordinal()]) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.BLACK_KING.ordinal()]) != 0) return true;
+            if ((AttackLookups.getBishopAttacks(sq, occ) & (pieces[Piece.BLACK_BISHOP.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()])) != 0) return true;
+            if ((AttackLookups.getRookAttacks(sq, occ) & (pieces[Piece.BLACK_ROOK.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()])) != 0) return true;
+        }
         return false;
     }
 
     @Override
     public boolean isKingAttacked() {
-        return false;
+        int kingIdx = (sideToMove == Side.WHITE) ? Piece.WHITE_KING.ordinal() : Piece.BLACK_KING.ordinal();
+        long kBoard = pieces[kingIdx];
+        if (kBoard == 0) return false;
+        int kingSq = Long.numberOfTrailingZeros(kBoard);
+        return isSquareAttacked(kingSq, sideToMove == Side.WHITE ? Side.BLACK : Side.WHITE);
     }
 
     @Override
@@ -480,6 +817,39 @@ public class Bitboard implements BoardInterface {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
                 moveList[index++] = encodeMove(sq, to, 0);
+            }
+        }
+
+        // --- Castling ---
+        if (isWhite) {
+            if ((castlingRights & CASTLE_WK) != 0) {
+                if ((occupied & ((1L << 5) | (1L << 6))) == 0) {
+                    if (!isSquareAttacked(4, Side.BLACK) && !isSquareAttacked(5, Side.BLACK) && !isSquareAttacked(6, Side.BLACK)) {
+                        moveList[index++] = encodeMove(4, 6, 0);
+                    }
+                }
+            }
+            if ((castlingRights & CASTLE_WQ) != 0) {
+                if ((occupied & ((1L << 1) | (1L << 2) | (1L << 3))) == 0) {
+                    if (!isSquareAttacked(4, Side.BLACK) && !isSquareAttacked(3, Side.BLACK) && !isSquareAttacked(2, Side.BLACK)) {
+                        moveList[index++] = encodeMove(4, 2, 0);
+                    }
+                }
+            }
+        } else {
+            if ((castlingRights & CASTLE_BK) != 0) {
+                if ((occupied & ((1L << 61) | (1L << 62))) == 0) {
+                    if (!isSquareAttacked(60, Side.WHITE) && !isSquareAttacked(61, Side.WHITE) && !isSquareAttacked(62, Side.WHITE)) {
+                        moveList[index++] = encodeMove(60, 62, 0);
+                    }
+                }
+            }
+            if ((castlingRights & CASTLE_BQ) != 0) {
+                if ((occupied & ((1L << 57) | (1L << 58) | (1L << 59))) == 0) {
+                    if (!isSquareAttacked(60, Side.WHITE) && !isSquareAttacked(59, Side.WHITE) && !isSquareAttacked(58, Side.WHITE)) {
+                        moveList[index++] = encodeMove(60, 58, 0);
+                    }
+                }
             }
         }
 
