@@ -12,7 +12,7 @@ public class SearchTest {
         int depth = 4;
 
         // Without NMP
-        Board board1 = new Board();
+        BoardInterface board1 = new ChesslibBoard();
         board1.loadFromFen(fen);
         Search search1 = new Search(board1);
         search1.setStopTime(System.currentTimeMillis() + 10000);
@@ -21,7 +21,7 @@ public class SearchTest {
         int nodes1 = search1.getNodesSearched();
 
         // With NMP
-        Board board2 = new Board();
+        BoardInterface board2 = new ChesslibBoard();
         board2.loadFromFen(fen);
         Search search2 = new Search(board2);
         search2.setStopTime(System.currentTimeMillis() + 10000);
@@ -39,7 +39,7 @@ public class SearchTest {
     @Test
     public void testMateInOne() {
         String fen = "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4";
-        Board board = new Board();
+        BoardInterface board = new ChesslibBoard();
         board.loadFromFen(fen);
         Search search = new Search(board);
         search.setStopTime(System.currentTimeMillis() + 5000);

@@ -12,7 +12,7 @@ public class EvaluatorMobilityTest {
         Evaluator evaluator = new Evaluator();
 
         // Scenario A: King on e2, Queen on d1, Bishop on f1 (Bad - blocking)
-        Board boardA = new Board();
+        BoardInterface boardA = new ChesslibBoard();
         boardA.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPP1PPPP/RN1QKBNR w KQkq - 0 1");
         // Note: FEN above is close, let's just construct the specific position to be sure.
         // Actually, FEN is easier.
@@ -33,7 +33,7 @@ public class EvaluatorMobilityTest {
         int scoreA = evaluator.evaluate(statusA);
 
         // Scenario B: King on e1 (Standard, Good)
-        Board boardB = new Board();
+        BoardInterface boardB = new ChesslibBoard();
         boardB.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         BoardStatus statusB = new BoardStatus(boardB);
         int scoreB = evaluator.evaluate(statusB);
@@ -52,14 +52,14 @@ public class EvaluatorMobilityTest {
         Evaluator evaluator = new Evaluator();
 
         // Scenario C: White Bishop on a1, blocked by pawns a2, b2.
-        Board boardC = new Board();
+        BoardInterface boardC = new ChesslibBoard();
         // 8/8/8/8/8/8/PP6/B7 w - - 0 1 (Bishop a1, pawns a2, b2)
         boardC.loadFromFen("k7/8/8/8/8/8/PP6/B6K w - - 0 1");
         BoardStatus statusC = new BoardStatus(boardC);
         int scoreC = evaluator.evaluate(statusC);
 
         // Scenario D: White Bishop on c4, open lines.
-        Board boardD = new Board();
+        BoardInterface boardD = new ChesslibBoard();
         // 8/8/8/8/2B5/8/PP6/7K w - - 0 1 (Bishop c4, pawns a2, b2 still there for material equality)
         boardD.loadFromFen("k7/8/8/8/2B5/8/PP6/7K w - - 0 1");
         BoardStatus statusD = new BoardStatus(boardD);

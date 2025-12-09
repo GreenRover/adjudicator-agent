@@ -1,6 +1,5 @@
 package ch.adjudicator.agent.engine;
 
-import com.github.bhlangonijr.chesslib.Board;
 import com.github.bhlangonijr.chesslib.Piece;
 import com.github.bhlangonijr.chesslib.move.Move;
 
@@ -127,7 +126,7 @@ public class MoveOrdering {
     /**
      * Calculate MVV-LVA score for a capture.
      */
-    private int getMvvLvaScore(Board board, Move move) {
+    private int getMvvLvaScore(BoardInterface board, Move move) {
         Piece victim = board.getPiece(move.getTo());
         Piece aggressor = board.getPiece(move.getFrom());
 
@@ -140,7 +139,7 @@ public class MoveOrdering {
     /**
      * Check if move is a capture.
      */
-    private boolean isCapture(Board board, Move move) {
+    private boolean isCapture(BoardInterface board, Move move) {
         return board.getPiece(move.getTo()) != Piece.NONE;
     }
 
@@ -155,7 +154,7 @@ public class MoveOrdering {
      * Rate a move according to the Golden Ordering Strategy.
      * Higher score = search first.
      */
-    public int rateMove(Board board, Move move, Move hashMove, int ply) {
+    public int rateMove(BoardInterface board, Move move, Move hashMove, int ply) {
         // 1. Hash Move (from TT) - Highest priority
         if (move.equals(hashMove)) {
             return 2_000_000;
@@ -198,7 +197,7 @@ public class MoveOrdering {
      * Pick the best move from the remaining moves and swap it to currentIndex.
      * This is more efficient than sorting the entire list.
      */
-    public void pickBestMove(Board board, List<Move> moves, int currentIndex, Move hashMove, int ply) {
+    public void pickBestMove(BoardInterface board, List<Move> moves, int currentIndex, Move hashMove, int ply) {
         if (currentIndex >= moves.size()) return;
 
         int bestScore = Integer.MIN_VALUE;

@@ -11,13 +11,13 @@ public class EvaluatorCastlingTest {
     public void testCastlingRightsValue() {
         // Create a board with castling rights for White ONLY
         // FEN: White can castle (KQ), Black cannot (-)
-        Board boardWithRights = new Board();
+        BoardInterface boardWithRights = new ChesslibBoard();
         boardWithRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
         BoardStatus statusWithRights = new BoardStatus(boardWithRights);
 
         // Create a board without castling rights (same position)
         // FEN: Nobody can castle
-        Board boardWithoutRights = new Board();
+        BoardInterface boardWithoutRights = new ChesslibBoard();
         boardWithoutRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1");
         BoardStatus statusWithoutRights = new BoardStatus(boardWithoutRights);
 
@@ -36,7 +36,7 @@ public class EvaluatorCastlingTest {
     @Test
     public void testBongcloudPenalty() {
         // Position A: King on e1, Pawn on e4. Castling rights intact for ALL.
-        Board startBoard = new Board();
+        BoardInterface startBoard = new ChesslibBoard();
         // FEN 1: White king e1, White to move. Both sides can castle.
         startBoard.loadFromFen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
         BoardStatus startStatus = new BoardStatus(startBoard);
@@ -44,7 +44,7 @@ public class EvaluatorCastlingTest {
 
         // Position B: King on e2, Pawn on e4. White lost rights. Black KEEPS rights.
         // FEN 2: White king e2, White to move. Black can castle (kq).
-        Board bongcloudBoard = new Board();
+        BoardInterface bongcloudBoard = new ChesslibBoard();
         bongcloudBoard.loadFromFen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPPKPPP/RNBQ1BNR w kq - 1 2");
         BoardStatus bongcloudStatus = new BoardStatus(bongcloudBoard);
         int bongcloudScore = Evaluator.evaluate(bongcloudStatus);

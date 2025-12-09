@@ -1,6 +1,5 @@
 package ch.adjudicator.agent.engine;
 
-import com.github.bhlangonijr.chesslib.Board;
 import com.github.bhlangonijr.chesslib.Piece;
 import com.github.bhlangonijr.chesslib.PieceType;
 import com.github.bhlangonijr.chesslib.Side;
@@ -19,7 +18,7 @@ public class Search {
     private static final int INFINITY = 1000000;
     private static final int MATE_SCORE = 900000;
 
-    private final Board board;
+    private final BoardInterface board;
     // Advanced move ordering
     private final TranspositionTable transpositionTable;
     private final MoveOrdering moveOrdering;
@@ -30,7 +29,7 @@ public class Search {
     private int depthReached;
     private boolean enableNmp = true;
 
-    public Search(Board board, TranspositionTable transpositionTable) {
+    public Search(BoardInterface board, TranspositionTable transpositionTable) {
         this.board = board;
         this.stopped = false;
         this.nodesSearched = 0;
@@ -38,7 +37,7 @@ public class Search {
         this.moveOrdering = new MoveOrdering(transpositionTable);
     }
 
-    public Search(Board board) {
+    public Search(BoardInterface board) {
         this(board, new TranspositionTable());
     }
 
@@ -62,7 +61,7 @@ public class Search {
         if (numThreads > 1) {
             String fen = board.getFen();
             for (int i = 0; i < numThreads - 1; i++) {
-                Board helperBoard = new Board();
+                BoardInterface helperBoard = new BoardWrapper();
                 helperBoard.loadFromFen(fen);
                 Search helper = new Search(helperBoard, transpositionTable);
                 helper.setStopTime(stopTime);

@@ -115,7 +115,7 @@ public class PolyglotBook {
         return moves;
     }
 
-    public BookEntry getBestMove(Board board) {
+    public BookEntry getBestMove(BoardInterface board) {
         return getBestMove(ZobristHasher.getZobristKey(board));
     }
 

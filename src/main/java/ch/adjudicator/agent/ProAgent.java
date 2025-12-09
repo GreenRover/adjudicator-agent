@@ -1,9 +1,6 @@
 package ch.adjudicator.agent;
 
-import ch.adjudicator.agent.engine.PolyglotBook;
-import ch.adjudicator.agent.engine.Search;
-import ch.adjudicator.agent.engine.TimeManager;
-import ch.adjudicator.agent.engine.TranspositionTable;
+import ch.adjudicator.agent.engine.*;
 import ch.adjudicator.client.*;
 import com.github.bhlangonijr.chesslib.Board;
 import com.github.bhlangonijr.chesslib.move.Move;
@@ -24,7 +21,7 @@ public class ProAgent implements Agent {
     private final String name;
     private final TranspositionTable transpositionTable;
     private final CpuTemperatureMonitor temperatureMonitor;
-    private Board board;
+    private BoardInterface board;
     private PolyglotBook bookPerfect;
     private PolyglotBook bookCerebellum;
     private Color myColor;
@@ -37,7 +34,7 @@ public class ProAgent implements Agent {
 
     public ProAgent(String name, boolean monitorCpuTemp) {
         this.name = name;
-        this.board = new Board();
+        this.board = new BoardWrapper();
         this.moveCount = 0;
         this.transpositionTable = new TranspositionTable();
         this.temperatureMonitor = monitorCpuTemp ? new CpuTemperatureMonitor() : null;
@@ -217,7 +214,7 @@ public class ProAgent implements Agent {
 
             if (ponderMove != null) {
                 LOGGER.info("[{}] Pondering on {}", name, moveToLAN(ponderMove));
-                Board ponderBoard = new Board();
+                BoardInterface ponderBoard = new BoardWrapper();
                 ponderBoard.loadFromFen(board.getFen());
                 ponderBoard.doMove(ponderMove);
 
@@ -249,7 +246,7 @@ public class ProAgent implements Agent {
                 name, info.getInitialTimeMs(), info.getIncrementMs());
 
         // Reset game state
-        board = new Board();
+        board = new BoardWrapper();
         moveCount = 0;
         int incrementMs = info.getIncrementMs();
         timeManager = new TimeManager(incrementMs);

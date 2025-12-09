@@ -13,7 +13,7 @@ public class StaticExchangeEvaluatorTest {
     public void testQueenTakesProtectedPawn() {
         // White Queen at d1, Black Pawn at d4 protected by Pawn at e5
         // 4k3/8/8/4p3/3p4/8/8/3Q4 w - - 0 1
-        Board board = new Board();
+        BoardInterface board = new ChesslibBoard();
         board.loadFromFen("4k3/8/8/4p3/3p4/8/8/3Q4 w - - 0 1");
 
         Move move = new Move(Square.D1, Square.D4); // QxP
@@ -28,7 +28,7 @@ public class StaticExchangeEvaluatorTest {
     @Test
     public void testQueenTakesUndefendedPawn() {
         // White Queen at d1, Black Pawn at d4 undefended
-        Board board = new Board();
+        BoardInterface board = new ChesslibBoard();
         board.loadFromFen("4k3/8/8/8/3p4/8/8/3Q4 w - - 0 1");
 
         Move move = new Move(Square.D1, Square.D4); // QxP

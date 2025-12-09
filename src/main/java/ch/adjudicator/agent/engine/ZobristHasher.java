@@ -10,7 +10,7 @@ public class ZobristHasher {
      * @param board A current board state.
      * @return The 64-bit Zobrist hash key.
      */
-    public static long getZobristKey(Board board) {
+    public static long getZobristKey(BoardInterface board) {
         long hash = 0L;
 
         // 1. Pieces
@@ -82,12 +82,12 @@ public class ZobristHasher {
      * @return The 64-bit Zobrist hash key.
      */
     public static long getZobristKey(String fen) {
-        Board board = new Board();
+        BoardInterface board = new ChesslibBoard();
         board.loadFromFen(fen);
         return getZobristKey(board);
     }
 
-    private static boolean isPieceAt(Board board, int rankIndex, int fileIndex, Piece target) {
+    private static boolean isPieceAt(BoardInterface board, int rankIndex, int fileIndex, Piece target) {
         // Find square with given rank and file.
         // Assuming Square values are ordered or we can search. 
         // Efficient way: Square.values()[rank*8 + file] usually works for A1..H8.
@@ -102,34 +102,21 @@ public class ZobristHasher {
     }
 
     private static int getPolyglotPieceIndex(Piece p) {
-        switch (p) {
-            case BLACK_PAWN:
-                return 0;
-            case WHITE_PAWN:
-                return 1;
-            case BLACK_KNIGHT:
-                return 2;
-            case WHITE_KNIGHT:
-                return 3;
-            case BLACK_BISHOP:
-                return 4;
-            case WHITE_BISHOP:
-                return 5;
-            case BLACK_ROOK:
-                return 6;
-            case WHITE_ROOK:
-                return 7;
-            case BLACK_QUEEN:
-                return 8;
-            case WHITE_QUEEN:
-                return 9;
-            case BLACK_KING:
-                return 10;
-            case WHITE_KING:
-                return 11;
-            default:
-                return -1;
-        }
+        return switch (p) {
+            case BLACK_PAWN -> 0;
+            case WHITE_PAWN -> 1;
+            case BLACK_KNIGHT -> 2;
+            case WHITE_KNIGHT -> 3;
+            case BLACK_BISHOP -> 4;
+            case WHITE_BISHOP -> 5;
+            case BLACK_ROOK -> 6;
+            case WHITE_ROOK -> 7;
+            case BLACK_QUEEN -> 8;
+            case WHITE_QUEEN -> 9;
+            case BLACK_KING -> 10;
+            case WHITE_KING -> 11;
+            default -> -1;
+        };
     }
 
     public static String toHex(long key) {

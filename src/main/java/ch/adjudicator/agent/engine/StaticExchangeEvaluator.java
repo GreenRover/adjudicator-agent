@@ -84,7 +84,7 @@ public class StaticExchangeEvaluator {
      * @param move  The move to evaluate (capture).
      * @return Positive value if the capture is good (winning material), negative if bad, 0 if equal.
      */
-    public static int see(Board board, Move move) {
+    public static int see(BoardInterface board, Move move) {
         // Create bitboard representation
         // Note: Creating BoardStatus is O(64) loops. Might be optimization target.
         BoardStatus bs = new BoardStatus(board);

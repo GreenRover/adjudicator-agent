@@ -52,7 +52,7 @@ public class BoardStatus {
     /**
      * Create BitBoard from chesslib Board.
      */
-    public BoardStatus(Board board) {
+    public BoardStatus(BoardInterface board) {
         initFromBoard(board);
     }
 
@@ -66,7 +66,7 @@ public class BoardStatus {
     /**
      * Initialize from chesslib Board.
      */
-    private void initFromBoard(Board board) {
+    private void initFromBoard(BoardInterface board) {
         // Clear all bitboards
         whitePawns = whiteKnights = whiteBishops = whiteRooks = whiteQueens = whiteKing = 0L;
         blackPawns = blackKnights = blackBishops = blackRooks = blackQueens = blackKing = 0L;
