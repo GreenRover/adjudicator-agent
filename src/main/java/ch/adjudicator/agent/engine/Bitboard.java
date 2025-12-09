@@ -332,4 +332,168 @@ public class Bitboard implements BoardInterface {
         if (piece == Piece.NONE) return 0L;
         return pieces[piece.ordinal()];
     }
+
+    public int generatePseudoLegalMoves(int[] moveList) {
+        int index = 0;
+        long friendly, enemy;
+        int pawnIdx, knightIdx, bishopIdx, rookIdx, queenIdx, kingIdx;
+        int promoRank, doublePushRank, startRank;
+        boolean isWhite = (sideToMove == Side.WHITE);
+
+        if (isWhite) {
+            friendly = whitePieces;
+            enemy = blackPieces;
+            pawnIdx = 0; // WHITE_PAWN
+            knightIdx = 1;
+            bishopIdx = 2;
+            rookIdx = 3;
+            queenIdx = 4;
+            kingIdx = 5;
+            promoRank = 7;
+            startRank = 1;
+            doublePushRank = 3;
+        } else {
+            friendly = blackPieces;
+            enemy = whitePieces;
+            pawnIdx = 6; // BLACK_PAWN
+            knightIdx = 7;
+            bishopIdx = 8;
+            rookIdx = 9;
+            queenIdx = 10;
+            kingIdx = 11;
+            promoRank = 0;
+            startRank = 6;
+            doublePushRank = 4;
+        }
+
+        long occupied = occupiedSquares;
+
+        // --- Pawns ---
+        long p = pieces[pawnIdx];
+        while (p != 0) {
+            int sq = Long.numberOfTrailingZeros(p);
+            p &= p - 1;
+
+            int rank = sq / 8;
+            int file = sq % 8;
+
+            // 1. Single Push
+            int nextRank = isWhite ? rank + 1 : rank - 1;
+            int forwardSq = nextRank * 8 + file;
+            if (((1L << forwardSq) & occupied) == 0) {
+                // Check promotion
+                if (nextRank == promoRank) {
+                    addPromoMoves(moveList, index, sq, forwardSq);
+                    index += 4;
+                } else {
+                    moveList[index++] = encodeMove(sq, forwardSq, 0);
+                    // 2. Double Push
+                    if (rank == startRank) {
+                        int doubleRank = isWhite ? rank + 2 : rank - 2;
+                        int doubleSq = doubleRank * 8 + file;
+                        if (((1L << doubleSq) & occupied) == 0) {
+                            moveList[index++] = encodeMove(sq, doubleSq, 0);
+                        }
+                    }
+                }
+            }
+
+            // 3. Captures
+            for (int dFile = -1; dFile <= 1; dFile += 2) {
+                if (file + dFile >= 0 && file + dFile < 8) {
+                    int captureSq = nextRank * 8 + (file + dFile);
+                    long captureBit = 1L << captureSq;
+                    if ((captureBit & enemy) != 0) {
+                        if (nextRank == promoRank) {
+                            addPromoMoves(moveList, index, sq, captureSq);
+                            index += 4;
+                        } else {
+                            moveList[index++] = encodeMove(sq, captureSq, 0);
+                        }
+                    } else if (captureSq == enPassantSquare.ordinal()) {
+                        // En Passant
+                        moveList[index++] = encodeMove(sq, captureSq, 0);
+                    }
+                }
+            }
+        }
+
+        // --- Knights ---
+        long n = pieces[knightIdx];
+        while (n != 0) {
+            int sq = Long.numberOfTrailingZeros(n);
+            n &= n - 1;
+            long attacks = AttackLookups.KNIGHT_ATTACKS[sq] & ~friendly;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                moveList[index++] = encodeMove(sq, to, 0);
+            }
+        }
+
+        // --- Bishops ---
+        long b = pieces[bishopIdx];
+        while (b != 0) {
+            int sq = Long.numberOfTrailingZeros(b);
+            b &= b - 1;
+            long attacks = AttackLookups.getBishopAttacks(sq, occupied) & ~friendly;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                moveList[index++] = encodeMove(sq, to, 0);
+            }
+        }
+
+        // --- Rooks ---
+        long r = pieces[rookIdx];
+        while (r != 0) {
+            int sq = Long.numberOfTrailingZeros(r);
+            r &= r - 1;
+            long attacks = AttackLookups.getRookAttacks(sq, occupied) & ~friendly;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                moveList[index++] = encodeMove(sq, to, 0);
+            }
+        }
+
+        // --- Queens ---
+        long q = pieces[queenIdx];
+        while (q != 0) {
+            int sq = Long.numberOfTrailingZeros(q);
+            q &= q - 1;
+            long attacks = AttackLookups.getQueenAttacks(sq, occupied) & ~friendly;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                moveList[index++] = encodeMove(sq, to, 0);
+            }
+        }
+
+        // --- King ---
+        long k = pieces[kingIdx];
+        while (k != 0) {
+            int sq = Long.numberOfTrailingZeros(k);
+            k &= k - 1;
+            long attacks = AttackLookups.KING_ATTACKS[sq] & ~friendly;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                moveList[index++] = encodeMove(sq, to, 0);
+            }
+        }
+
+        return index;
+    }
+
+    private void addPromoMoves(int[] moveList, int index, int from, int to) {
+        moveList[index] = encodeMove(from, to, 1); // Knight
+        moveList[index+1] = encodeMove(from, to, 2); // Bishop
+        moveList[index+2] = encodeMove(from, to, 3); // Rook
+        moveList[index+3] = encodeMove(from, to, 4); // Queen
+    }
+
+    public static int encodeMove(int from, int to, int promo) {
+        return from | (to << 6) | (promo << 12);
+    }
 }
