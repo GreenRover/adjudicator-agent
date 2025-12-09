@@ -1,4 +1,4 @@
-package ch.adjudicator.agent.engine;
+package ch.adjudicator.agent.engine.board;
 
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Piece;
@@ -49,10 +49,10 @@ public class Bitboard implements BoardInterface {
             history[i] = new StateHistory();
         }
         pieces = new long[Piece.values().length];
-        loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        clear();
     }
 
-    private void clear() {
+    public void clear() {
         Arrays.fill(pieces, 0L);
         whitePieces = 0L;
         blackPieces = 0L;

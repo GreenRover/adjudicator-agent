@@ -1,6 +1,7 @@
 package ch.adjudicator.agent.engine;
 
-import com.github.bhlangonijr.chesslib.Board;
+import ch.adjudicator.agent.engine.board.BoardInterface;
+import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.Square;
 import com.github.bhlangonijr.chesslib.move.Move;
 import org.junit.jupiter.api.Test;

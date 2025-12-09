@@ -1,5 +1,8 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.BoardInterface;
+import ch.adjudicator.agent.engine.board.BoardStatus;
+import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.Piece;
 import com.github.bhlangonijr.chesslib.PieceType;
 import com.github.bhlangonijr.chesslib.Side;

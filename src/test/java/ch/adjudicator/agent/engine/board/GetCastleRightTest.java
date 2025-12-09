@@ -1,8 +1,5 @@
 package ch.adjudicator.agent.engine.board;
 
-import ch.adjudicator.agent.engine.Bitboard;
-import ch.adjudicator.agent.engine.BoardInterface;
-import ch.adjudicator.agent.engine.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Side;
 import org.junit.jupiter.params.ParameterizedTest;

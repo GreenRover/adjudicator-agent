@@ -1,9 +1,5 @@
 package ch.adjudicator.agent.engine.board;
 
-import ch.adjudicator.agent.engine.Bitboard;
-import ch.adjudicator.agent.engine.BoardInterface;
-import ch.adjudicator.agent.engine.ChesslibBoard;
-import com.github.bhlangonijr.chesslib.Board;
 import com.github.bhlangonijr.chesslib.move.Move;
 import org.junit.jupiter.api.Test;
 import java.util.List;
@@ -22,6 +18,7 @@ public class PerftTest {
     @Test
     public void testStartPositionBitboard() {
         BoardInterface board = new Bitboard();
+        board.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         long nodes = perft(board, 3);
         assertEquals(8902, nodes, "Start Position Depth 3 failed");
     }

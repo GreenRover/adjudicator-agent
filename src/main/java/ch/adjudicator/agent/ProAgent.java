@@ -1,8 +1,9 @@
 package ch.adjudicator.agent;
 
 import ch.adjudicator.agent.engine.*;
+import ch.adjudicator.agent.engine.board.BoardInterface;
+import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import ch.adjudicator.client.*;
-import com.github.bhlangonijr.chesslib.Board;
 import com.github.bhlangonijr.chesslib.move.Move;
 import lombok.Getter;
 import org.slf4j.Logger;

@@ -1,6 +1,6 @@
 package ch.adjudicator.agent.engine;
 
-import com.github.bhlangonijr.chesslib.Board;
+import ch.adjudicator.agent.engine.board.BoardInterface;
 
 import java.io.DataInputStream;
 import java.io.IOException;

@@ -1,6 +1,5 @@
 package ch.adjudicator.agent.engine.board;
 
-import ch.adjudicator.agent.engine.BitboardAttacks;
 import com.github.bhlangonijr.chesslib.Side;
 import com.github.bhlangonijr.chesslib.Square;
 import org.junit.jupiter.api.Test;

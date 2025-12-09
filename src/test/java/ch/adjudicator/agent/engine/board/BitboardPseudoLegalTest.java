@@ -1,6 +1,5 @@
 package ch.adjudicator.agent.engine.board;
 
-import ch.adjudicator.agent.engine.Bitboard;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 

@@ -1,4 +1,4 @@
-package ch.adjudicator.agent.engine;
+package ch.adjudicator.agent.engine.board;
 
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Piece;

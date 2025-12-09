@@ -1,5 +1,7 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.BoardStatus;
+
 /**
  * PeSTO (Piece Square Tables Only) Evaluation.
  * Provides fast static evaluation using piece values and positional bonuses.
