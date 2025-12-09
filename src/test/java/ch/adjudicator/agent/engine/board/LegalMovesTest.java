@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@SuppressWarnings("SameParameterValue")
 class LegalMovesTest {
 
     @ParameterizedTest
