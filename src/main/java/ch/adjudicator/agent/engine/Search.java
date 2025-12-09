@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.BoardStatus;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
@@ -64,7 +65,7 @@ public class Search {
         if (numThreads > 1) {
             String fen = board.getFen();
             for (int i = 0; i < numThreads - 1; i++) {
-                BoardInterface helperBoard = new ChesslibBoard();
+                BoardInterface helperBoard = new Bitboard();
                 helperBoard.loadFromFen(fen);
                 Search helper = new Search(helperBoard, transpositionTable);
                 helper.setStopTime(stopTime);

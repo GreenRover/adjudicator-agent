@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.BoardStatus;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
@@ -14,7 +15,7 @@ public class EvaluatorStructureTest {
     public void testPawnStructure() {
         // Position A: Connected passed pawns (d4, e4)
         // Black king far away
-        BoardInterface boardA = new ChesslibBoard();
+        BoardInterface boardA = new Bitboard();
         boardA.loadFromFen("4k3/8/8/8/3PP3/8/8/4K3 w - - 0 1");
         BoardStatus statusA = new BoardStatus(boardA);
         int scoreA = Evaluator.evaluate(statusA);
@@ -22,7 +23,7 @@ public class EvaluatorStructureTest {
         // Position B: Isolated pawns (a4, h4) - PeSTO might favor center pawns, so this might pass even without structure eval.
         // Let's use Doubled pawns to be sure.
         // Position B: Doubled pawns (a3, a4)
-        BoardInterface boardB = new ChesslibBoard();
+        BoardInterface boardB = new Bitboard();
         boardB.loadFromFen("4k3/8/8/8/P7/P7/8/4K3 w - - 0 1");
         BoardStatus statusB = new BoardStatus(boardB);
         int scoreB = Evaluator.evaluate(statusB);
@@ -42,13 +43,13 @@ public class EvaluatorStructureTest {
         // Let's try to isolate one.
         // Pos D: a4, c4 (b-file open, so isolated?) No, a4 is isolated if no b-pawns. c4 is isolated if no b/d pawns.
         // "4k3/8/8/8/P1P5/8/8/4K3 w - - 0 1" -> a4 and c4 are both isolated.
-        BoardInterface boardD = new ChesslibBoard();
+        BoardInterface boardD = new Bitboard();
         boardD.loadFromFen("4k3/8/8/8/P1P5/8/8/4K3 w - - 0 1");
         BoardStatus statusD = new BoardStatus(boardD);
         int scoreD = Evaluator.evaluate(statusD);
 
         // Pos E: Connected a4, b4
-        BoardInterface boardE = new ChesslibBoard();
+        BoardInterface boardE = new Bitboard();
         boardE.loadFromFen("4k3/8/8/8/PP6/8/8/4K3 w - - 0 1");
         BoardStatus statusE = new BoardStatus(boardE);
         int scoreE = Evaluator.evaluate(statusE);
@@ -62,10 +63,10 @@ public class EvaluatorStructureTest {
     @Test
     public void testPassedPawnBonus() {
         // Passed pawn on 6th rank vs 2nd rank
-        BoardInterface boardA = new ChesslibBoard();
+        BoardInterface boardA = new Bitboard();
         boardA.loadFromFen("4k3/8/4P3/8/8/8/8/4K3 w - - 0 1"); // e6 passed
 
-        BoardInterface boardB = new ChesslibBoard();
+        BoardInterface boardB = new Bitboard();
         boardB.loadFromFen("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"); // e2 passed (start pos)
 
         BoardStatus statusA = new BoardStatus(boardA);

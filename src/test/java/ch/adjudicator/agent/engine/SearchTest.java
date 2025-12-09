@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import org.junit.jupiter.api.Test;
@@ -13,7 +14,7 @@ public class SearchTest {
         int depth = 4;
 
         // Without NMP
-        BoardInterface board1 = new ChesslibBoard();
+        BoardInterface board1 = new Bitboard();
         board1.loadFromFen(fen);
         Search search1 = new Search(board1);
         search1.setStopTime(System.currentTimeMillis() + 10000);
@@ -22,7 +23,7 @@ public class SearchTest {
         int nodes1 = search1.getNodesSearched();
 
         // With NMP
-        BoardInterface board2 = new ChesslibBoard();
+        BoardInterface board2 = new Bitboard();
         board2.loadFromFen(fen);
         Search search2 = new Search(board2);
         search2.setStopTime(System.currentTimeMillis() + 10000);
@@ -40,7 +41,7 @@ public class SearchTest {
     @Test
     public void testMateInOne() {
         String fen = "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4";
-        BoardInterface board = new ChesslibBoard();
+        BoardInterface board = new Bitboard();
         board.loadFromFen(fen);
         Search search = new Search(board);
         search.setStopTime(System.currentTimeMillis() + 5000);

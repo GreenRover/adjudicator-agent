@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine.board;
 
+import ch.adjudicator.agent.engine.Zobrist;
 import ch.adjudicator.agent.engine.ZobristHasher;
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Piece;
@@ -13,12 +14,11 @@ import java.util.List;
 
 public class Bitboard implements BoardInterface {
 
-    // Cache enum values to avoid cloning overhead
     private static final Square[] SQUARES = Square.values();
     private static final Piece[] PIECES = Piece.values();
-
-    // Fast lookup for piece side (0=White, 1=Black, 2=None)
     private static final Side[] PIECE_SIDES = new Side[PIECES.length];
+    // Map Piece enum to Zobrist piece index (0=Pawn..5=King)
+    private static final int[] ZOBRIST_PIECE_INDICES = new int[PIECES.length];
 
     static {
         for (Piece p : PIECES) {
@@ -26,17 +26,31 @@ public class Bitboard implements BoardInterface {
                 PIECE_SIDES[p.ordinal()] = null;
             } else {
                 PIECE_SIDES[p.ordinal()] = p.name().startsWith("WHITE") ? Side.WHITE : Side.BLACK;
+
+                int type = switch (p.getPieceType()) {
+                    case PAWN -> Zobrist.PAWN;
+                    case KNIGHT -> Zobrist.KNIGHT;
+                    case BISHOP -> Zobrist.BISHOP;
+                    case ROOK -> Zobrist.ROOK;
+                    case QUEEN -> Zobrist.QUEEN;
+                    case KING -> Zobrist.KING;
+                    default -> -1;
+                };
+                ZOBRIST_PIECE_INDICES[p.ordinal()] = type;
             }
         }
     }
 
     private final long[] pieces;
-    // Mailbox representation for O(1) piece lookup
     private final Piece[] mailbox;
 
     private long whitePieces;
     private long blackPieces;
     private long occupiedSquares;
+
+    private int whiteKingSq = -1;
+    private int blackKingSq = -1;
+
     private Side sideToMove;
     private int castlingRights;
     private Square enPassantSquare;
@@ -44,7 +58,6 @@ public class Bitboard implements BoardInterface {
     private int fullMoveNumber;
     private long zobristHash;
 
-    // History
     private static final int MAX_GAME_MOVES = 2048;
 
     private static class StateHistory {
@@ -71,7 +84,8 @@ public class Bitboard implements BoardInterface {
         }
         pieces = new long[PIECES.length];
         mailbox = new Piece[64];
-        clear();
+        // Initialize with standard start position
+        loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
     public void clear() {
@@ -87,24 +101,27 @@ public class Bitboard implements BoardInterface {
         fullMoveNumber = 1;
         historyPly = 0;
         zobristHash = 0L;
+        whiteKingSq = -1;
+        blackKingSq = -1;
     }
+
+    // --- Core Bitboard Operations ---
 
     public void putPiece(Piece piece, Square sq) {
         if (piece == Piece.NONE) return;
         int sqIdx = sq.ordinal();
         long bit = 1L << sqIdx;
 
-        // Update bitboards
         pieces[piece.ordinal()] |= bit;
 
         if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) {
             whitePieces |= bit;
+            if (piece == Piece.WHITE_KING) whiteKingSq = sqIdx;
         } else {
             blackPieces |= bit;
+            if (piece == Piece.BLACK_KING) blackKingSq = sqIdx;
         }
         occupiedSquares |= bit;
-
-        // Update mailbox
         mailbox[sqIdx] = piece;
     }
 
@@ -116,17 +133,16 @@ public class Bitboard implements BoardInterface {
         long bit = 1L << sqIdx;
         long mask = ~bit;
 
-        // Update bitboards
         pieces[p.ordinal()] &= mask;
 
         if (PIECE_SIDES[p.ordinal()] == Side.WHITE) {
             whitePieces &= mask;
+            if (p == Piece.WHITE_KING) whiteKingSq = -1;
         } else {
             blackPieces &= mask;
+            if (p == Piece.BLACK_KING) blackKingSq = -1;
         }
         occupiedSquares &= mask;
-
-        // Update mailbox
         mailbox[sqIdx] = Piece.NONE;
     }
 
@@ -143,7 +159,6 @@ public class Bitboard implements BoardInterface {
         String castling = parts[2];
         String enPassant = parts[3];
 
-        // 1. Placement
         int rank = 7;
         int file = 0;
         for (char c : placement.toCharArray()) {
@@ -162,10 +177,8 @@ public class Bitboard implements BoardInterface {
             }
         }
 
-        // 2. Active Color
         sideToMove = activeColor.equals("w") ? Side.WHITE : Side.BLACK;
 
-        // 3. Castling
         if (!castling.equals("-")) {
             if (castling.contains("K")) castlingRights |= CASTLE_WK;
             if (castling.contains("Q")) castlingRights |= CASTLE_WQ;
@@ -173,7 +186,6 @@ public class Bitboard implements BoardInterface {
             if (castling.contains("q")) castlingRights |= CASTLE_BQ;
         }
 
-        // 4. En Passant
         if (!enPassant.equals("-")) {
             try {
                 enPassantSquare = Square.valueOf(enPassant.toUpperCase());
@@ -184,7 +196,6 @@ public class Bitboard implements BoardInterface {
             enPassantSquare = Square.NONE;
         }
 
-        // 5. Halfmove Clock
         if (parts.length > 4) {
             try {
                 halfMoveClock = Integer.parseInt(parts[4]);
@@ -193,7 +204,6 @@ public class Bitboard implements BoardInterface {
             }
         }
 
-        // 6. Fullmove Number
         if (parts.length > 5) {
             try {
                 fullMoveNumber = Integer.parseInt(parts[5]);
@@ -202,7 +212,7 @@ public class Bitboard implements BoardInterface {
             }
         }
 
-        // Initialize Zobrist
+        // Full Zobrist calculation for initial position
         zobristHash = ZobristHasher.getZobristKey(this);
     }
 
@@ -227,8 +237,6 @@ public class Bitboard implements BoardInterface {
     @Override
     public String getFen() {
         StringBuilder sb = new StringBuilder();
-
-        // 1. Placement
         for (int rank = 7; rank >= 0; rank--) {
             int empty = 0;
             for (int file = 0; file < 8; file++) {
@@ -250,41 +258,25 @@ public class Bitboard implements BoardInterface {
                 sb.append('/');
             }
         }
-
         sb.append(' ');
-
-        // 2. Active Color
         sb.append(sideToMove == Side.WHITE ? "w" : "b");
-
         sb.append(' ');
-
-        // 3. Castling
         boolean anyCastle = false;
         if ((castlingRights & CASTLE_WK) != 0) { sb.append('K'); anyCastle = true; }
         if ((castlingRights & CASTLE_WQ) != 0) { sb.append('Q'); anyCastle = true; }
         if ((castlingRights & CASTLE_BK) != 0) { sb.append('k'); anyCastle = true; }
         if ((castlingRights & CASTLE_BQ) != 0) { sb.append('q'); anyCastle = true; }
         if (!anyCastle) sb.append('-');
-
         sb.append(' ');
-
-        // 4. En Passant
         if (enPassantSquare == Square.NONE) {
             sb.append('-');
         } else {
             sb.append(enPassantSquare.toString().toLowerCase());
         }
-
         sb.append(' ');
-
-        // 5. Halfmove
         sb.append(halfMoveClock);
-
         sb.append(' ');
-
-        // 6. Fullmove
         sb.append(fullMoveNumber);
-
         return sb.toString();
     }
 
@@ -316,37 +308,196 @@ public class Bitboard implements BoardInterface {
         return sideToMove;
     }
 
-    @Override
-    public List<Move> legalMoves() {
-        int[] moves = new int[256];
-        int count = generateLegalMoves(moves);
-        List<Move> list = new ArrayList<>(count);
-        for (int i = 0; i < count; i++) {
-            int m = moves[i];
-            int from = m & 0x3F;
-            int to = (m >> 6) & 0x3F;
-            int promo = (m >> 12) & 7;
-            Piece promoPiece = Piece.NONE;
-            if (promo != 0) {
-                if (sideToMove == Side.WHITE) {
-                    switch (promo) {
-                        case 1 -> promoPiece = Piece.WHITE_KNIGHT;
-                        case 2 -> promoPiece = Piece.WHITE_BISHOP;
-                        case 3 -> promoPiece = Piece.WHITE_ROOK;
-                        case 4 -> promoPiece = Piece.WHITE_QUEEN;
-                    }
-                } else {
-                    switch (promo) {
-                        case 1 -> promoPiece = Piece.BLACK_KNIGHT;
-                        case 2 -> promoPiece = Piece.BLACK_BISHOP;
-                        case 3 -> promoPiece = Piece.BLACK_ROOK;
-                        case 4 -> promoPiece = Piece.BLACK_QUEEN;
-                    }
+    // --- Helpers for Zobrist Updates ---
+
+    private void xorPiece(Piece piece, int sq) {
+        int color = (PIECE_SIDES[piece.ordinal()] == Side.WHITE) ? Zobrist.WHITE : Zobrist.BLACK;
+        int type = ZOBRIST_PIECE_INDICES[piece.ordinal()];
+        zobristHash ^= Zobrist.pieceKey(type, color, sq);
+    }
+
+    private void xorCastling(int rights) {
+        if ((rights & CASTLE_WK) != 0) zobristHash ^= Zobrist.castlingKey(0);
+        if ((rights & CASTLE_WQ) != 0) zobristHash ^= Zobrist.castlingKey(1);
+        if ((rights & CASTLE_BK) != 0) zobristHash ^= Zobrist.castlingKey(2);
+        if ((rights & CASTLE_BQ) != 0) zobristHash ^= Zobrist.castlingKey(3);
+    }
+
+    private void xorEnPassant(Square epSq) {
+        if (epSq != Square.NONE) {
+            zobristHash ^= Zobrist.enPassantKey(epSq.getFile().ordinal());
+        }
+    }
+
+    // --- Move Execution ---
+
+    public void makeMove(int move) {
+        StateHistory state = history[historyPly];
+        state.move = move;
+        state.castlingRights = castlingRights;
+        state.enPassantSquare = enPassantSquare;
+        state.halfMoveClock = halfMoveClock;
+        state.zobristHash = zobristHash;
+
+        int from = move & 0x3F;
+        int to = (move >> 6) & 0x3F;
+        int promo = (move >> 12) & 7;
+
+        Piece movingPiece = mailbox[from];
+        Piece capturedPiece = mailbox[to];
+
+        boolean isEP = false;
+        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) &&
+                enPassantSquare != Square.NONE && to == enPassantSquare.ordinal()) {
+            isEP = true;
+            capturedPiece = (sideToMove == Side.WHITE) ? Piece.BLACK_PAWN : Piece.WHITE_PAWN;
+        }
+
+        state.capturedPiece = capturedPiece;
+        historyPly++;
+
+        // ZOBRIST: Remove moving piece from 'from'
+        xorPiece(movingPiece, from);
+
+        // 1. Remove moving piece from source
+        removePieceInternal(movingPiece, from);
+
+        // 2. Remove captured piece
+        if (capturedPiece != Piece.NONE) {
+            if (isEP) {
+                int capSq = (sideToMove == Side.WHITE) ? to - 8 : to + 8;
+                removePieceInternal(capturedPiece, capSq);
+                // ZOBRIST: Remove captured piece (EP location)
+                xorPiece(capturedPiece, capSq);
+            } else {
+                removePieceInternal(capturedPiece, to);
+                // ZOBRIST: Remove captured piece (Target location)
+                xorPiece(capturedPiece, to);
+            }
+        }
+
+        // 3. Place piece (handle promo)
+        Piece pieceToPlace = movingPiece;
+        if (promo != 0) {
+            if (sideToMove == Side.WHITE) {
+                switch (promo) {
+                    case 1 -> pieceToPlace = Piece.WHITE_KNIGHT;
+                    case 2 -> pieceToPlace = Piece.WHITE_BISHOP;
+                    case 3 -> pieceToPlace = Piece.WHITE_ROOK;
+                    case 4 -> pieceToPlace = Piece.WHITE_QUEEN;
+                }
+            } else {
+                switch (promo) {
+                    case 1 -> pieceToPlace = Piece.BLACK_KNIGHT;
+                    case 2 -> pieceToPlace = Piece.BLACK_BISHOP;
+                    case 3 -> pieceToPlace = Piece.BLACK_ROOK;
+                    case 4 -> pieceToPlace = Piece.BLACK_QUEEN;
                 }
             }
-            list.add(new Move(SQUARES[from], SQUARES[to], promoPiece));
         }
-        return list;
+        putPieceInternal(pieceToPlace, to);
+        // ZOBRIST: Add placed piece at 'to'
+        xorPiece(pieceToPlace, to);
+
+        // 4. Handle Castling (Rook)
+        if ((movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
+            if (to > from) { // Kingside
+                int rFrom = from + 3;
+                int rTo = from + 1;
+                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+                removePieceInternal(rook, rFrom);
+                putPieceInternal(rook, rTo);
+                // ZOBRIST: Update Rook
+                xorPiece(rook, rFrom);
+                xorPiece(rook, rTo);
+            } else { // Queenside
+                int rFrom = from - 4;
+                int rTo = from - 1;
+                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+                removePieceInternal(rook, rFrom);
+                putPieceInternal(rook, rTo);
+                // ZOBRIST: Update Rook
+                xorPiece(rook, rFrom);
+                xorPiece(rook, rTo);
+            }
+        }
+
+        // ZOBRIST: Update Castling Rights (Remove old)
+        xorCastling(castlingRights);
+
+        // Update State
+        if (movingPiece == Piece.WHITE_KING) castlingRights &= ~(CASTLE_WK | CASTLE_WQ);
+        else if (movingPiece == Piece.BLACK_KING) castlingRights &= ~(CASTLE_BK | CASTLE_BQ);
+
+        if (movingPiece == Piece.WHITE_ROOK) {
+            if (from == 7) castlingRights &= ~CASTLE_WK;
+            if (from == 0) castlingRights &= ~CASTLE_WQ;
+        } else if (movingPiece == Piece.BLACK_ROOK) {
+            if (from == 63) castlingRights &= ~CASTLE_BK;
+            if (from == 56) castlingRights &= ~CASTLE_BQ;
+        }
+
+        if (capturedPiece == Piece.WHITE_ROOK) {
+            if (to == 7) castlingRights &= ~CASTLE_WK;
+            if (to == 0) castlingRights &= ~CASTLE_WQ;
+        } else if (capturedPiece == Piece.BLACK_ROOK) {
+            if (to == 63) castlingRights &= ~CASTLE_BK;
+            if (to == 56) castlingRights &= ~CASTLE_BQ;
+        }
+
+        // ZOBRIST: Update Castling Rights (Add new)
+        xorCastling(castlingRights);
+
+        // ZOBRIST: Update EP (Remove old)
+        xorEnPassant(enPassantSquare);
+
+        enPassantSquare = Square.NONE;
+        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) && Math.abs(to - from) == 16) {
+            int epIndex = (from + to) / 2;
+            enPassantSquare = SQUARES[epIndex];
+        }
+
+        // ZOBRIST: Update EP (Add new)
+        xorEnPassant(enPassantSquare);
+
+        if (capturedPiece != Piece.NONE || movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) {
+            halfMoveClock = 0;
+        } else {
+            halfMoveClock++;
+        }
+
+        if (sideToMove == Side.BLACK) fullMoveNumber++;
+        sideToMove = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
+
+        // ZOBRIST: Flip side to move
+        zobristHash ^= Zobrist.blackToMoveKey();
+    }
+
+    private void putPieceInternal(Piece piece, int sqIdx) {
+        long bit = 1L << sqIdx;
+        pieces[piece.ordinal()] |= bit;
+        if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) {
+            whitePieces |= bit;
+            if (piece == Piece.WHITE_KING) whiteKingSq = sqIdx;
+        } else {
+            blackPieces |= bit;
+            if (piece == Piece.BLACK_KING) blackKingSq = sqIdx;
+        }
+        occupiedSquares |= bit;
+        mailbox[sqIdx] = piece;
+    }
+
+    private void removePieceInternal(Piece piece, int sqIdx) {
+        long bit = 1L << sqIdx;
+        long mask = ~bit;
+        pieces[piece.ordinal()] &= mask;
+        if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) {
+            whitePieces &= mask;
+        } else {
+            blackPieces &= mask;
+        }
+        occupiedSquares &= mask;
+        mailbox[sqIdx] = Piece.NONE;
     }
 
     @Override
@@ -399,143 +550,6 @@ public class Bitboard implements BoardInterface {
             return new Move(SQUARES[from], SQUARES[to], promoPiece);
         }
         return null;
-    }
-
-    public void makeMove(int move) {
-        StateHistory state = history[historyPly];
-        state.move = move;
-        state.castlingRights = castlingRights;
-        state.enPassantSquare = enPassantSquare;
-        state.halfMoveClock = halfMoveClock;
-        state.zobristHash = zobristHash;
-
-        int from = move & 0x3F;
-        int to = (move >> 6) & 0x3F;
-        int promo = (move >> 12) & 7;
-
-        // Fast lookup via mailbox
-        Piece movingPiece = mailbox[from];
-        Piece capturedPiece = mailbox[to];
-
-        boolean isEP = false;
-        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) &&
-                enPassantSquare != Square.NONE && to == enPassantSquare.ordinal()) {
-            isEP = true;
-            capturedPiece = (sideToMove == Side.WHITE) ? Piece.BLACK_PAWN : Piece.WHITE_PAWN;
-        }
-
-        state.capturedPiece = capturedPiece;
-        historyPly++;
-
-        // 1. Remove moving piece from source
-        removePieceInternal(movingPiece, from);
-
-        // 2. Handle Capture
-        if (capturedPiece != Piece.NONE) {
-            if (isEP) {
-                int capSq = (sideToMove == Side.WHITE) ? to - 8 : to + 8;
-                removePieceInternal(capturedPiece, capSq);
-            } else {
-                removePieceInternal(capturedPiece, to);
-            }
-        }
-
-        // 3. Determine placed piece (handle promotion)
-        Piece pieceToPlace = movingPiece;
-        if (promo != 0) {
-            if (sideToMove == Side.WHITE) {
-                switch (promo) {
-                    case 1 -> pieceToPlace = Piece.WHITE_KNIGHT;
-                    case 2 -> pieceToPlace = Piece.WHITE_BISHOP;
-                    case 3 -> pieceToPlace = Piece.WHITE_ROOK;
-                    case 4 -> pieceToPlace = Piece.WHITE_QUEEN;
-                }
-            } else {
-                switch (promo) {
-                    case 1 -> pieceToPlace = Piece.BLACK_KNIGHT;
-                    case 2 -> pieceToPlace = Piece.BLACK_BISHOP;
-                    case 3 -> pieceToPlace = Piece.BLACK_ROOK;
-                    case 4 -> pieceToPlace = Piece.BLACK_QUEEN;
-                }
-            }
-        }
-
-        // 4. Place piece at destination
-        putPieceInternal(pieceToPlace, to);
-
-        // 5. Handle Castling (Rook moves)
-        if ((movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
-            if (to > from) { // Kingside
-                int rFrom = from + 3;
-                int rTo = from + 1;
-                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
-                removePieceInternal(rook, rFrom);
-                putPieceInternal(rook, rTo);
-            } else { // Queenside
-                int rFrom = from - 4;
-                int rTo = from - 1;
-                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
-                removePieceInternal(rook, rFrom);
-                putPieceInternal(rook, rTo);
-            }
-        }
-
-        // Update State
-        if (movingPiece == Piece.WHITE_KING) castlingRights &= ~(CASTLE_WK | CASTLE_WQ);
-        else if (movingPiece == Piece.BLACK_KING) castlingRights &= ~(CASTLE_BK | CASTLE_BQ);
-
-        if (movingPiece == Piece.WHITE_ROOK) {
-            if (from == 7) castlingRights &= ~CASTLE_WK;
-            if (from == 0) castlingRights &= ~CASTLE_WQ;
-        } else if (movingPiece == Piece.BLACK_ROOK) {
-            if (from == 63) castlingRights &= ~CASTLE_BK;
-            if (from == 56) castlingRights &= ~CASTLE_BQ;
-        }
-
-        if (capturedPiece == Piece.WHITE_ROOK) {
-            if (to == 7) castlingRights &= ~CASTLE_WK;
-            if (to == 0) castlingRights &= ~CASTLE_WQ;
-        } else if (capturedPiece == Piece.BLACK_ROOK) {
-            if (to == 63) castlingRights &= ~CASTLE_BK;
-            if (to == 56) castlingRights &= ~CASTLE_BQ;
-        }
-
-        enPassantSquare = Square.NONE;
-        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) && Math.abs(to - from) == 16) {
-            int epIndex = (from + to) / 2;
-            enPassantSquare = SQUARES[epIndex];
-        }
-
-        if (capturedPiece != Piece.NONE || movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) {
-            halfMoveClock = 0;
-        } else {
-            halfMoveClock++;
-        }
-
-        if (sideToMove == Side.BLACK) fullMoveNumber++;
-        sideToMove = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
-
-        // Note: For pure speed test, we skip incremental Zobrist updates.
-        // In production, update hash here incrementally.
-    }
-
-    private void putPieceInternal(Piece piece, int sqIdx) {
-        long bit = 1L << sqIdx;
-        pieces[piece.ordinal()] |= bit;
-        if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) whitePieces |= bit;
-        else blackPieces |= bit;
-        occupiedSquares |= bit;
-        mailbox[sqIdx] = piece;
-    }
-
-    private void removePieceInternal(Piece piece, int sqIdx) {
-        long bit = 1L << sqIdx;
-        long mask = ~bit;
-        pieces[piece.ordinal()] &= mask;
-        if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) whitePieces &= mask;
-        else blackPieces &= mask;
-        occupiedSquares &= mask;
-        mailbox[sqIdx] = Piece.NONE;
     }
 
     public void unmakeMove(int move) {
@@ -596,19 +610,45 @@ public class Bitboard implements BoardInterface {
         }
     }
 
+    @Override
+    public List<Move> legalMoves() {
+        int[] moves = new int[256];
+        int count = generateLegalMoves(moves);
+        List<Move> list = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            int m = moves[i];
+            int from = m & 0x3F;
+            int to = (m >> 6) & 0x3F;
+            int promo = (m >> 12) & 7;
+            Piece promoPiece = Piece.NONE;
+            if (promo != 0) {
+                if (sideToMove == Side.WHITE) {
+                    switch (promo) {
+                        case 1 -> promoPiece = Piece.WHITE_KNIGHT;
+                        case 2 -> promoPiece = Piece.WHITE_BISHOP;
+                        case 3 -> promoPiece = Piece.WHITE_ROOK;
+                        case 4 -> promoPiece = Piece.WHITE_QUEEN;
+                    }
+                } else {
+                    switch (promo) {
+                        case 1 -> promoPiece = Piece.BLACK_KNIGHT;
+                        case 2 -> promoPiece = Piece.BLACK_BISHOP;
+                        case 3 -> promoPiece = Piece.BLACK_ROOK;
+                        case 4 -> promoPiece = Piece.BLACK_QUEEN;
+                    }
+                }
+            }
+            list.add(new Move(SQUARES[from], SQUARES[to], promoPiece));
+        }
+        return list;
+    }
+
     public int generateLegalMoves(int[] moves) {
         int[] pseudo = new int[256];
         int count = generatePseudoLegalMoves(pseudo);
         int legalCount = 0;
 
-        // Cache king info
-        int kingIdx = (sideToMove == Side.WHITE) ? Piece.WHITE_KING.ordinal() : Piece.BLACK_KING.ordinal();
-        long kingBit = pieces[kingIdx];
-        int kingSq = -1;
-        if (kingBit != 0) {
-            kingSq = Long.numberOfTrailingZeros(kingBit);
-        }
-
+        int kingSq = (sideToMove == Side.WHITE) ? whiteKingSq : blackKingSq;
         Side us = sideToMove;
         Side enemy = (us == Side.WHITE) ? Side.BLACK : Side.WHITE;
 
@@ -617,141 +657,95 @@ public class Bitboard implements BoardInterface {
             int from = m & 0x3F;
             int to = (m >> 6) & 0x3F;
 
-            // Castling Special Case: verify path is safe
+            // Castling Path Check
             if (kingSq != -1 && from == kingSq && Math.abs(to - from) == 2) {
                 if (isSquareAttacked(from, enemy)) continue;
                 int mid = (from + to) / 2;
                 if (isSquareAttacked(mid, enemy)) continue;
-                // Castling destination safety is checked by isLegal() below (standard check)
             }
 
-            // Use lightweight legality check
-            if (isLegal(m)) {
+            if (isLegalVirtual(m, kingSq)) {
                 moves[legalCount++] = m;
             }
         }
         return legalCount;
     }
 
-    /**
-     * Checks if a pseudo-legal move is strictly legal (leaves King safe)
-     * without performing full Make/Unmake.
-     */
-    private boolean isLegal(int move) {
+    private boolean isLegalVirtual(int move, int kingSq) {
         int from = move & 0x3F;
         int to = (move >> 6) & 0x3F;
-        int promo = (move >> 12) & 7;
 
         Piece movingPiece = mailbox[from];
-        Piece capturedPiece = mailbox[to];
+        Side us = PIECE_SIDES[movingPiece.ordinal()];
 
-        // Identify if En Passant
-        boolean isEP = false;
-        int epCapSq = -1;
+        long fromBit = 1L << from;
+        long toBit = 1L << to;
+        long occupied = occupiedSquares;
+        long ignoreMask = -1L;
+
+        int currentKingSq = kingSq;
+        if (movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) {
+            currentKingSq = to;
+        }
+
         if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) &&
                 enPassantSquare != Square.NONE && to == enPassantSquare.ordinal()) {
-            isEP = true;
-            epCapSq = (sideToMove == Side.WHITE) ? to - 8 : to + 8;
-            capturedPiece = mailbox[epCapSq]; // The pawn being captured
+
+            int capSq = (us == Side.WHITE) ? to - 8 : to + 8;
+            long capBit = 1L << capSq;
+            occupied = (occupied & ~fromBit & ~capBit) | toBit;
+            ignoreMask = ~capBit;
+
+        } else {
+            occupied = (occupied & ~fromBit) | toBit;
+            if (mailbox[to] != Piece.NONE) {
+                ignoreMask = ~toBit;
+            }
         }
 
-        // Temporarily execute move on Bitboards (Minimal updates)
-        // 1. Remove moving piece
-        long fromBit = 1L << from;
-        long fromMask = ~fromBit;
-        long originalOcc = occupiedSquares;
-
-        // Manual inlining for speed (no method calls)
-        pieces[movingPiece.ordinal()] &= fromMask;
-        if (sideToMove == Side.WHITE) whitePieces &= fromMask; else blackPieces &= fromMask;
-        occupiedSquares &= fromMask;
-
-        // 2. Remove captured piece
-        if (capturedPiece != Piece.NONE) {
-            int capLoc = isEP ? epCapSq : to;
-            long capBit = 1L << capLoc;
-            long capMask = ~capBit;
-            pieces[capturedPiece.ordinal()] &= capMask;
-            if (sideToMove == Side.WHITE) blackPieces &= capMask; else whitePieces &= capMask;
-            occupiedSquares &= capMask;
-        }
-
-        // 3. Place piece at dest (Handle promo if needed for bitboard correctness?
-        // For check detection, the type of MY piece only matters if it's the King.
-        // If it's a promotion, we can just move the Pawn. The blocking effect is the same.
-        // EXCEPT if I promoted to a piece that could be captured? No, I'm checking if *I* am in check.)
-        Piece pieceOnDest = movingPiece;
-        // Optimization: If it's a King move, we MUST update the King bitboard to check the new square safety.
-        // If it's a promotion, updating as Pawn is fine for blocking lines, unless we worry about complex interactions.
-        // Let's stick to moving the actual piece type (even if wrong promo type) or just movingPiece.
-        // If movingPiece is KING, we must update KING bitboard.
-
-        long toBit = 1L << to;
-        pieces[pieceOnDest.ordinal()] |= toBit;
-        if (sideToMove == Side.WHITE) whitePieces |= toBit; else blackPieces |= toBit;
-        occupiedSquares |= toBit;
-
-        // 4. Handle Castling Rook (Important for line blocking)
-        boolean isCastling = (movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2;
-        int rFrom = -1, rTo = -1;
-        Piece rook = Piece.NONE;
-
-        if (isCastling) {
-            rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
+        if ((movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
+            int rFrom, rTo;
             if (to > from) { rFrom = from + 3; rTo = from + 1; }
             else { rFrom = from - 4; rTo = from - 1; }
 
-            // Move rook
-            long rFromBit = 1L << rFrom;
-            long rFromMask = ~rFromBit;
-            pieces[rook.ordinal()] &= rFromMask;
-            if (sideToMove == Side.WHITE) whitePieces &= rFromMask; else blackPieces &= rFromMask;
-            occupiedSquares &= rFromMask;
-
-            long rToBit = 1L << rTo;
-            pieces[rook.ordinal()] |= rToBit;
-            if (sideToMove == Side.WHITE) whitePieces |= rToBit; else blackPieces |= rToBit;
-            occupiedSquares |= rToBit;
+            occupied &= ~(1L << rFrom);
+            occupied |= (1L << rTo);
         }
 
-        // --- CHECK SAFETY ---
-        boolean safe = !isKingAttacked();
+        return !isSquareAttackedVirtual(currentKingSq, us == Side.WHITE ? Side.BLACK : Side.WHITE, occupied, ignoreMask);
+    }
 
-        // --- REVERT UPDATES (Manual) ---
+    private boolean isSquareAttackedVirtual(int sq, Side attackerSide, long occupied, long ignoreMask) {
+        if (attackerSide == Side.WHITE) {
+            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & pieces[Piece.WHITE_PAWN.ordinal()] & ignoreMask) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.WHITE_KNIGHT.ordinal()] & ignoreMask) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.WHITE_KING.ordinal()] & ignoreMask) != 0) return true;
 
-        // Revert Castling
-        if (isCastling) {
-            long rToBit = 1L << rTo;
-            long rToMask = ~rToBit;
-            pieces[rook.ordinal()] &= rToMask;
-            if (sideToMove == Side.WHITE) whitePieces &= rToMask; else blackPieces &= rToMask;
+            long bishopsQueens = (pieces[Piece.WHITE_BISHOP.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()]) & ignoreMask;
+            if (bishopsQueens != 0) {
+                if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
+            }
 
-            long rFromBit = 1L << rFrom;
-            pieces[rook.ordinal()] |= rFromBit;
-            if (sideToMove == Side.WHITE) whitePieces |= rFromBit; else blackPieces |= rFromBit;
+            long rooksQueens = (pieces[Piece.WHITE_ROOK.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()]) & ignoreMask;
+            if (rooksQueens != 0) {
+                if ((AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
+            }
+        } else {
+            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & pieces[Piece.BLACK_PAWN.ordinal()] & ignoreMask) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.BLACK_KNIGHT.ordinal()] & ignoreMask) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.BLACK_KING.ordinal()] & ignoreMask) != 0) return true;
+
+            long bishopsQueens = (pieces[Piece.BLACK_BISHOP.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()]) & ignoreMask;
+            if (bishopsQueens != 0) {
+                if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
+            }
+
+            long rooksQueens = (pieces[Piece.BLACK_ROOK.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()]) & ignoreMask;
+            if (rooksQueens != 0) {
+                if ((AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
+            }
         }
-
-        // Revert Dest
-        long toMask = ~toBit;
-        pieces[pieceOnDest.ordinal()] &= toMask;
-        if (sideToMove == Side.WHITE) whitePieces &= toMask; else blackPieces &= toMask;
-
-        // Revert Capture
-        if (capturedPiece != Piece.NONE) {
-            int capLoc = isEP ? epCapSq : to;
-            long capBit = 1L << capLoc;
-            pieces[capturedPiece.ordinal()] |= capBit;
-            if (sideToMove == Side.WHITE) blackPieces |= capBit; else whitePieces |= capBit;
-        }
-
-        // Revert Source
-        pieces[movingPiece.ordinal()] |= fromBit;
-        if (sideToMove == Side.WHITE) whitePieces |= fromBit; else blackPieces |= fromBit;
-
-        // Restore occupancy explicitly to avoid drift
-        occupiedSquares = originalOcc;
-
-        return safe;
+        return false;
     }
 
     @Override
@@ -765,10 +759,22 @@ public class Bitboard implements BoardInterface {
         state.zobristHash = zobristHash;
 
         historyPly++;
+
+        // ZOBRIST: Update EP (Remove old)
+        xorEnPassant(enPassantSquare);
         if (enPassantSquare != Square.NONE) enPassantSquare = Square.NONE;
+
+        // ZOBRIST: No new EP
+
+        // Side change
         sideToMove = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
-        if (sideToMove == Side.BLACK) fullMoveNumber++;
+        if (sideToMove == Side.BLACK) fullMoveNumber++; // Increment if we just finished White's turn (now Black's)? No, standard is incr on Black move.
+        // If White passes, side becomes Black. We treat it as White having moved.
+
         halfMoveClock++;
+
+        // ZOBRIST: Flip side
+        zobristHash ^= Zobrist.blackToMoveKey();
 
         return true;
     }
@@ -801,10 +807,8 @@ public class Bitboard implements BoardInterface {
 
     @Override
     public boolean isKingAttacked() {
-        int kingIdx = (sideToMove == Side.WHITE) ? Piece.WHITE_KING.ordinal() : Piece.BLACK_KING.ordinal();
-        long kBoard = pieces[kingIdx];
-        if (kBoard == 0) return false;
-        int kingSq = Long.numberOfTrailingZeros(kBoard);
+        int kingSq = (sideToMove == Side.WHITE) ? whiteKingSq : blackKingSq;
+        if (kingSq == -1) return false;
         return isSquareAttacked(kingSq, sideToMove == Side.WHITE ? Side.BLACK : Side.WHITE);
     }
 
@@ -894,7 +898,6 @@ public class Bitboard implements BoardInterface {
             int rank = sq / 8;
             int file = sq % 8;
 
-            // 1. Single Push
             int nextRank = isWhite ? rank + 1 : rank - 1;
             int forwardSq = nextRank * 8 + file;
             if (((1L << forwardSq) & occupied) == 0) {
@@ -913,7 +916,6 @@ public class Bitboard implements BoardInterface {
                 }
             }
 
-            // 3. Captures
             for (int dFile = -1; dFile <= 1; dFile += 2) {
                 if (file + dFile >= 0 && file + dFile < 8) {
                     int captureSq = nextRank * 8 + (file + dFile);

@@ -1,6 +1,7 @@
 package ch.adjudicator.agent;
 
 import ch.adjudicator.agent.engine.*;
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import ch.adjudicator.client.*;
@@ -28,6 +29,7 @@ public class ProAgent implements Agent {
     private Color myColor;
     private TimeManager timeManager;
     private int moveCount;
+    private boolean disableBookLookup;
     @Getter
     private boolean lastMoveFromBook;
     private Search ponderSearch;
@@ -35,8 +37,9 @@ public class ProAgent implements Agent {
 
     public ProAgent(String name, boolean monitorCpuTemp) {
         this.name = name;
-        this.board = new ChesslibBoard();
+        this.board = new Bitboard();
         this.moveCount = 0;
+        this.disableBookLookup = false;
         this.transpositionTable = new TranspositionTable();
         this.temperatureMonitor = monitorCpuTemp ? new CpuTemperatureMonitor() : null;
 
@@ -137,7 +140,7 @@ public class ProAgent implements Agent {
         lastMoveFromBook = false;
 
         // 1. Try opening book first
-        if (moveCount <= 15) {
+        if (moveCount <= 12 && !disableBookLookup) {
             // Determine color if not set (fallback)
             if (myColor == null) {
                 myColor = request.getOpponentMove().isEmpty() ? Color.WHITE : Color.BLACK;
@@ -164,15 +167,18 @@ public class ProAgent implements Agent {
                     }
                 } else {
                     LOGGER.info("[{}] Unable to find move in any book", name);
+                    if (moveCount > 5) {
+                        disableBookLookup = true;
+                    }
                 }
             } catch (Exception e) {
                 LOGGER.warn("[{}] Book lookup failed: {}", name, e.getMessage());
             }
         }
 
-        // Optimize memory after move 15 by clearing opening books
-        if (moveCount == 15) {
-            LOGGER.info("[{}] Move 15 reached, clearing opening books to free memory", name);
+        // Optimize memory after move 12 by clearing opening books
+        if (moveCount == 12) {
+            LOGGER.info("[{}] Move 12 reached, clearing opening books to free memory", name);
             bookPerfect = null;
             bookCerebellum = null;
             System.gc();
@@ -215,7 +221,7 @@ public class ProAgent implements Agent {
 
             if (ponderMove != null) {
                 LOGGER.info("[{}] Pondering on {}", name, moveToLAN(ponderMove));
-                BoardInterface ponderBoard = new ChesslibBoard();
+                BoardInterface ponderBoard = new Bitboard();
                 ponderBoard.loadFromFen(board.getFen());
                 ponderBoard.doMove(ponderMove);
 
@@ -247,7 +253,7 @@ public class ProAgent implements Agent {
                 name, info.getInitialTimeMs(), info.getIncrementMs());
 
         // Reset game state
-        board = new ChesslibBoard();
+        board = new Bitboard();
         moveCount = 0;
         int incrementMs = info.getIncrementMs();
         timeManager = new TimeManager(incrementMs);

@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.BoardStatus;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
@@ -13,13 +14,13 @@ public class EvaluatorCastlingTest {
     public void testCastlingRightsValue() {
         // Create a board with castling rights for White ONLY
         // FEN: White can castle (KQ), Black cannot (-)
-        BoardInterface boardWithRights = new ChesslibBoard();
+        BoardInterface boardWithRights = new Bitboard();
         boardWithRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
         BoardStatus statusWithRights = new BoardStatus(boardWithRights);
 
         // Create a board without castling rights (same position)
         // FEN: Nobody can castle
-        BoardInterface boardWithoutRights = new ChesslibBoard();
+        BoardInterface boardWithoutRights = new Bitboard();
         boardWithoutRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1");
         BoardStatus statusWithoutRights = new BoardStatus(boardWithoutRights);
 

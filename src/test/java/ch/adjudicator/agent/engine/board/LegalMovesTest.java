@@ -2,11 +2,16 @@ package ch.adjudicator.agent.engine.board;
 
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class LegalMovesTest {
@@ -27,6 +32,18 @@ class LegalMovesTest {
         board.loadFromFen(fen);
         boolean hasMoves = !board.legalMoves().isEmpty();
         assertEquals(expectedHasMoves, hasMoves, "Failed for FEN: " + fen);
+    }
+
+    @Test
+    void testSpecificIllegalMove() {
+        String fen = "4r1k1/2b1rpp1/2pq2bp/p2p4/3RnP2/PPN1PN1P/1BP1Q1P1/4R1K1 b - - 1 24";
+        BoardInterface board = new Bitboard();
+        board.loadFromFen(fen);
+        List<String> moves = board.legalMoves().stream()
+                .map(Object::toString)
+                .collect(Collectors.toList());
+
+        assertThat(moves, not(hasItem("d6g3")));
     }
 
     private static Stream<Object[]> provideFens() {

@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.*;
@@ -84,7 +85,7 @@ public class ZobristHasher {
      * @return The 64-bit Zobrist hash key.
      */
     public static long getZobristKey(String fen) {
-        BoardInterface board = new ChesslibBoard();
+        BoardInterface board = new Bitboard();
         board.loadFromFen(fen);
         return getZobristKey(board);
     }

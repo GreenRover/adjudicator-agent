@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.agent.engine.board.BoardInterface;
 import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.Square;
@@ -14,7 +15,7 @@ public class StaticExchangeEvaluatorTest {
     public void testQueenTakesProtectedPawn() {
         // White Queen at d1, Black Pawn at d4 protected by Pawn at e5
         // 4k3/8/8/4p3/3p4/8/8/3Q4 w - - 0 1
-        BoardInterface board = new ChesslibBoard();
+        BoardInterface board = new Bitboard();
         board.loadFromFen("4k3/8/8/4p3/3p4/8/8/3Q4 w - - 0 1");
 
         Move move = new Move(Square.D1, Square.D4); // QxP
