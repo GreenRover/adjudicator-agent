@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine.board;
 
+import ch.adjudicator.agent.engine.Bitboard;
 import ch.adjudicator.agent.engine.BoardInterface;
 import ch.adjudicator.agent.engine.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.CastleRight;
@@ -17,10 +18,20 @@ class GetCastleRightTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testGetCastleRight(String fen, CastleRight expectedWhite, CastleRight expectedBlack) {
+    void testGetCastleRightChesslib(String fen, CastleRight expectedWhite, CastleRight expectedBlack) {
         BoardInterface board = new ChesslibBoard();
         board.loadFromFen(fen);
         
+        assertEquals(expectedWhite, board.getCastleRight(Side.WHITE), "Failed White rights for FEN: " + fen);
+        assertEquals(expectedBlack, board.getCastleRight(Side.BLACK), "Failed Black rights for FEN: " + fen);
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideFens")
+    void testGetCastleRightBitboard(String fen, CastleRight expectedWhite, CastleRight expectedBlack) {
+        BoardInterface board = new Bitboard();
+        board.loadFromFen(fen);
+
         assertEquals(expectedWhite, board.getCastleRight(Side.WHITE), "Failed White rights for FEN: " + fen);
         assertEquals(expectedBlack, board.getCastleRight(Side.BLACK), "Failed Black rights for FEN: " + fen);
     }

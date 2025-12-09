@@ -34,7 +34,7 @@ public class ProAgent implements Agent {
 
     public ProAgent(String name, boolean monitorCpuTemp) {
         this.name = name;
-        this.board = new BoardWrapper();
+        this.board = new ChesslibBoard();
         this.moveCount = 0;
         this.transpositionTable = new TranspositionTable();
         this.temperatureMonitor = monitorCpuTemp ? new CpuTemperatureMonitor() : null;
@@ -214,7 +214,7 @@ public class ProAgent implements Agent {
 
             if (ponderMove != null) {
                 LOGGER.info("[{}] Pondering on {}", name, moveToLAN(ponderMove));
-                BoardInterface ponderBoard = new BoardWrapper();
+                BoardInterface ponderBoard = new ChesslibBoard();
                 ponderBoard.loadFromFen(board.getFen());
                 ponderBoard.doMove(ponderMove);
 
@@ -246,7 +246,7 @@ public class ProAgent implements Agent {
                 name, info.getInitialTimeMs(), info.getIncrementMs());
 
         // Reset game state
-        board = new BoardWrapper();
+        board = new ChesslibBoard();
         moveCount = 0;
         int incrementMs = info.getIncrementMs();
         timeManager = new TimeManager(incrementMs);

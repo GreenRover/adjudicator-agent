@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine.board;
 
+import ch.adjudicator.agent.engine.Bitboard;
 import ch.adjudicator.agent.engine.BoardInterface;
 import ch.adjudicator.agent.engine.ChesslibBoard;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,8 +16,17 @@ class LegalMovesTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testLegalMoves(String fen, boolean expectedHasMoves) {
+    void testLegalMovesChesslib(String fen, boolean expectedHasMoves) {
         BoardInterface board = new ChesslibBoard();
+        board.loadFromFen(fen);
+        boolean hasMoves = !board.legalMoves().isEmpty();
+        assertEquals(expectedHasMoves, hasMoves, "Failed for FEN: " + fen);
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideFens")
+    void testLegalMovesBitboard(String fen, boolean expectedHasMoves) {
+        BoardInterface board = new Bitboard();
         board.loadFromFen(fen);
         boolean hasMoves = !board.legalMoves().isEmpty();
         assertEquals(expectedHasMoves, hasMoves, "Failed for FEN: " + fen);

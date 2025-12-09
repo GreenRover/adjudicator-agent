@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine.board;
 
+import ch.adjudicator.agent.engine.Bitboard;
 import ch.adjudicator.agent.engine.BoardInterface;
 import ch.adjudicator.agent.engine.ChesslibBoard;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,8 +16,16 @@ class IsKingAttackedTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testIsKingAttacked(String fen, boolean expectedAttacked) {
+    void testIsKingAttackedChesslib(String fen, boolean expectedAttacked) {
         BoardInterface board = new ChesslibBoard();
+        board.loadFromFen(fen);
+        assertEquals(expectedAttacked, board.isKingAttacked(), "Failed for FEN: " + fen);
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideFens")
+    void testIsKingAttackedBitboard(String fen, boolean expectedAttacked) {
+        BoardInterface board = new Bitboard();
         board.loadFromFen(fen);
         assertEquals(expectedAttacked, board.isKingAttacked(), "Failed for FEN: " + fen);
     }

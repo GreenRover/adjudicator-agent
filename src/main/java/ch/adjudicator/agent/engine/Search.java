@@ -61,7 +61,7 @@ public class Search {
         if (numThreads > 1) {
             String fen = board.getFen();
             for (int i = 0; i < numThreads - 1; i++) {
-                BoardInterface helperBoard = new BoardWrapper();
+                BoardInterface helperBoard = new ChesslibBoard();
                 helperBoard.loadFromFen(fen);
                 Search helper = new Search(helperBoard, transpositionTable);
                 helper.setStopTime(stopTime);

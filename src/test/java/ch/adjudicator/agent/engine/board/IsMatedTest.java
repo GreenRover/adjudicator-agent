@@ -1,5 +1,6 @@
 package ch.adjudicator.agent.engine.board;
 
+import ch.adjudicator.agent.engine.Bitboard;
 import ch.adjudicator.agent.engine.BoardInterface;
 import ch.adjudicator.agent.engine.ChesslibBoard;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,8 +16,16 @@ class IsMatedTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testIsMated(String fen, boolean expectedMate) {
+    void testIsMatedChesslib(String fen, boolean expectedMate) {
         BoardInterface board = new ChesslibBoard();
+        board.loadFromFen(fen);
+        assertEquals(expectedMate, board.isMated(), "Failed for FEN: " + fen);
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideFens")
+    void testIsMatedBitboard(String fen, boolean expectedMate) {
+        BoardInterface board = new Bitboard();
         board.loadFromFen(fen);
         assertEquals(expectedMate, board.isMated(), "Failed for FEN: " + fen);
     }
