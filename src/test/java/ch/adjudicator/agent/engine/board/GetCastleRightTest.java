@@ -15,18 +15,8 @@ class GetCastleRightTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testGetCastleRightChesslib(String fen, CastleRight expectedWhite, CastleRight expectedBlack) {
-        BoardInterface board = new ChesslibBoard();
-        board.loadFromFen(fen);
-        
-        assertEquals(expectedWhite, board.getCastleRight(Side.WHITE), "Failed White rights for FEN: " + fen);
-        assertEquals(expectedBlack, board.getCastleRight(Side.BLACK), "Failed Black rights for FEN: " + fen);
-    }
-
-    @ParameterizedTest
-    @MethodSource("provideFens")
     void testGetCastleRightBitboard(String fen, CastleRight expectedWhite, CastleRight expectedBlack) {
-        BoardInterface board = new Bitboard();
+        Bitboard board = new Bitboard();
         board.loadFromFen(fen);
 
         assertEquals(expectedWhite, board.getCastleRight(Side.WHITE), "Failed White rights for FEN: " + fen);
@@ -35,17 +25,6 @@ class GetCastleRightTest {
 
     private static Stream<Object[]> provideFens() {
         List<Object[]> cases = new ArrayList<>();
-        
-        String[] piecesSetups = {
-            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR", // Standard
-            "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR", // e4
-            "4k3/8/8/8/8/8/8/4K3", // Kings only
-            "r3k2r/8/8/8/8/8/8/R3K2R", // Rooks and Kings
-            "8/8/8/8/8/8/8/8", // Empty (technically invalid but parser might handle rights independently) - wait, chesslib might complain about missing kings.
-            // Let's use valid positions with Kings.
-            "8/8/3k4/8/8/3K4/8/8",
-            "k7/8/8/8/8/8/8/K7"
-        };
         
         // Remove the empty board if it causes issues, stick to 6 valid setups.
         // Setup 1: Start

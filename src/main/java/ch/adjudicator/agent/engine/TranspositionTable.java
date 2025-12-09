@@ -1,7 +1,5 @@
 package ch.adjudicator.agent.engine;
 
-import com.github.bhlangonijr.chesslib.move.Move;
-
 /**
  * Transposition Table for storing previously searched positions.
  * Uses Zobrist hashing to identify positions and stores best moves and scores.
@@ -46,7 +44,7 @@ public class TranspositionTable {
      * Store a position in the transposition table.
      * Two-Tier replacement: Deepest + Always Replace.
      */
-    public void store(long zobristHash, Move bestMove, int score, int depth, int flag) {
+    public void store(long zobristHash, int bestMove, int score, int depth, int flag) {
         int index = getIndex(zobristHash);
         TTEntry deepEntry = table[index];
         TTEntry recentEntry = table[index + 1];
@@ -97,21 +95,21 @@ public class TranspositionTable {
     /**
      * Get the best move from a previous search (if available).
      */
-    public Move getBestMove(long zobristHash) {
+    public int getBestMove(long zobristHash) {
         TTEntry entry = probe(zobristHash);
-        return entry != null ? entry.bestMove : null;
+        return entry != null ? entry.bestMove : 0;
     }
 
     /**
      * Clear the transposition table.
      */
     public void clear() {
-        for (int i = 0; i < table.length; i++) {
-            table[i].zobristKey = 0;
-            table[i].bestMove = null;
-            table[i].depth = 0;
-            table[i].score = 0;
-            table[i].flag = TTEntry.EXACT;
+        for (TTEntry ttEntry : table) {
+            ttEntry.zobristKey = 0;
+            ttEntry.bestMove = 0;
+            ttEntry.depth = 0;
+            ttEntry.score = 0;
+            ttEntry.flag = TTEntry.EXACT;
         }
     }
 
@@ -123,38 +121,25 @@ public class TranspositionTable {
         return table.length;
     }
 
-    /**
-     * Get the fill rate of the table (for diagnostics).
-     */
-    public double getFillRate() {
-        int filled = 0;
-        for (TTEntry entry : table) {
-            if (entry.zobristKey != 0) {
-                filled++;
-            }
-        }
-        return (double) filled / table.length;
-    }
-
     public static class TTEntry {
         public static final int EXACT = 0;
         public static final int LOWER_BOUND = 1;
         public static final int UPPER_BOUND = 2;
         public volatile long zobristKey;
-        public volatile Move bestMove;
+        public volatile int bestMove;
         public volatile int score;
         public volatile int depth;
         public volatile int flag; // EXACT, LOWER_BOUND, UPPER_BOUND
 
         public TTEntry() {
             this.zobristKey = 0;
-            this.bestMove = null;
+            this.bestMove = 0;
             this.score = 0;
             this.depth = 0;
             this.flag = EXACT;
         }
 
-        public void store(long key, Move move, int score, int depth, int flag) {
+        public void store(long key, int move, int score, int depth, int flag) {
             this.zobristKey = key;
             this.bestMove = move;
             this.score = score;

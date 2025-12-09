@@ -1,9 +1,6 @@
 package ch.adjudicator.agent.engine;
 
 import ch.adjudicator.agent.engine.board.Bitboard;
-import ch.adjudicator.agent.engine.board.BoardInterface;
-import ch.adjudicator.agent.engine.board.BoardStatus;
-import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,18 +11,16 @@ public class EvaluatorCastlingTest {
     public void testCastlingRightsValue() {
         // Create a board with castling rights for White ONLY
         // FEN: White can castle (KQ), Black cannot (-)
-        BoardInterface boardWithRights = new Bitboard();
+        Bitboard boardWithRights = new Bitboard();
         boardWithRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQ - 0 1");
-        BoardStatus statusWithRights = new BoardStatus(boardWithRights);
 
         // Create a board without castling rights (same position)
         // FEN: Nobody can castle
-        BoardInterface boardWithoutRights = new Bitboard();
+        Bitboard boardWithoutRights = new Bitboard();
         boardWithoutRights.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1");
-        BoardStatus statusWithoutRights = new BoardStatus(boardWithoutRights);
 
-        int scoreWithRights = Evaluator.evaluate(statusWithRights);
-        int scoreWithoutRights = Evaluator.evaluate(statusWithoutRights);
+        int scoreWithRights = Evaluator.evaluate(boardWithRights);
+        int scoreWithoutRights = Evaluator.evaluate(boardWithoutRights);
 
         System.out.println("Score with rights: " + scoreWithRights);
         System.out.println("Score without rights: " + scoreWithoutRights);
@@ -39,18 +34,16 @@ public class EvaluatorCastlingTest {
     @Test
     public void testBongcloudPenalty() {
         // Position A: King on e1, Pawn on e4. Castling rights intact for ALL.
-        BoardInterface startBoard = new ChesslibBoard();
+        Bitboard startBoard = new Bitboard();
         // FEN 1: White king e1, White to move. Both sides can castle.
         startBoard.loadFromFen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1");
-        BoardStatus startStatus = new BoardStatus(startBoard);
-        int startScore = Evaluator.evaluate(startStatus);
+        int startScore = Evaluator.evaluate(startBoard);
 
         // Position B: King on e2, Pawn on e4. White lost rights. Black KEEPS rights.
         // FEN 2: White king e2, White to move. Black can castle (kq).
-        BoardInterface bongcloudBoard = new ChesslibBoard();
+        Bitboard bongcloudBoard = new Bitboard();
         bongcloudBoard.loadFromFen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPPKPPP/RNBQ1BNR w kq - 1 2");
-        BoardStatus bongcloudStatus = new BoardStatus(bongcloudBoard);
-        int bongcloudScore = Evaluator.evaluate(bongcloudStatus);
+        int bongcloudScore = Evaluator.evaluate(bongcloudBoard);
 
         System.out.println("Start White Score (Ke1): " + startScore);
         System.out.println("Bongcloud White Score (Ke2): " + bongcloudScore);

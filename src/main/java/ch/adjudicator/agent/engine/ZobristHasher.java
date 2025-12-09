@@ -1,8 +1,6 @@
 package ch.adjudicator.agent.engine;
 
 import ch.adjudicator.agent.engine.board.Bitboard;
-import ch.adjudicator.agent.engine.board.BoardInterface;
-import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.*;
 
 public class ZobristHasher {
@@ -13,7 +11,7 @@ public class ZobristHasher {
      * @param board A current board state.
      * @return The 64-bit Zobrist hash key.
      */
-    public static long getZobristKey(BoardInterface board) {
+    public static long getZobristKey(Bitboard board) {
         long hash = 0L;
 
         // 1. Pieces
@@ -85,12 +83,12 @@ public class ZobristHasher {
      * @return The 64-bit Zobrist hash key.
      */
     public static long getZobristKey(String fen) {
-        BoardInterface board = new Bitboard();
+        Bitboard board = new Bitboard();
         board.loadFromFen(fen);
         return getZobristKey(board);
     }
 
-    private static boolean isPieceAt(BoardInterface board, int rankIndex, int fileIndex, Piece target) {
+    private static boolean isPieceAt(Bitboard board, int rankIndex, int fileIndex, Piece target) {
         // Find square with given rank and file.
         // Assuming Square values are ordered or we can search. 
         // Efficient way: Square.values()[rank*8 + file] usually works for A1..H8.

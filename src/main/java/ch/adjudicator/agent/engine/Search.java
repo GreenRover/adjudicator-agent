@@ -1,13 +1,10 @@
 package ch.adjudicator.agent.engine;
 
 import ch.adjudicator.agent.engine.board.Bitboard;
-import ch.adjudicator.agent.engine.board.BoardInterface;
-import ch.adjudicator.agent.engine.board.BoardStatus;
-import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import com.github.bhlangonijr.chesslib.Piece;
 import com.github.bhlangonijr.chesslib.PieceType;
 import com.github.bhlangonijr.chesslib.Side;
-import com.github.bhlangonijr.chesslib.move.Move;
+import com.github.bhlangonijr.chesslib.Square;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,19 +18,23 @@ public class Search {
     private static final int MAX_DEPTH = 50;
     private static final int INFINITY = 1000000;
     private static final int MATE_SCORE = 900000;
+    private static final Square[] SQUARES = Square.values();
 
-    private final BoardInterface board;
+    private final Bitboard board;
     // Advanced move ordering
     private final TranspositionTable transpositionTable;
     private final MoveOrdering moveOrdering;
     private long stopTime;
     private volatile boolean stopped;
-    private Move bestMoveFound;
+    private int bestMoveFound; // Encoded int move
     private int nodesSearched;
     private int depthReached;
     private boolean enableNmp = true;
 
-    public Search(BoardInterface board, TranspositionTable transpositionTable) {
+    // Pre-allocated move buffers [depth][max_moves]
+    private final int[][] moveBuffer = new int[MAX_DEPTH + 1][256];
+
+    public Search(Bitboard board, TranspositionTable transpositionTable) {
         this.board = board;
         this.stopped = false;
         this.nodesSearched = 0;
@@ -41,7 +42,7 @@ public class Search {
         this.moveOrdering = new MoveOrdering(transpositionTable);
     }
 
-    public Search(BoardInterface board) {
+    public Search(Bitboard board) {
         this(board, new TranspositionTable());
     }
 
@@ -49,12 +50,12 @@ public class Search {
      * Find the best move using Iterative Deepening.
      *
      * @param allocatedTimeMs Time allocated for this search
-     * @return Best move found
+     * @return Best move found (encoded as int)
      */
-    public Move findBestMove(long allocatedTimeMs) {
+    public int findBestMove(long allocatedTimeMs) {
         stopTime = System.currentTimeMillis() + allocatedTimeMs;
         stopped = false;
-        bestMoveFound = null;
+        bestMoveFound = 0;
         nodesSearched = 0;
         depthReached = 0;
 
@@ -65,7 +66,7 @@ public class Search {
         if (numThreads > 1) {
             String fen = board.getFen();
             for (int i = 0; i < numThreads - 1; i++) {
-                BoardInterface helperBoard = new Bitboard();
+                Bitboard helperBoard = new Bitboard();
                 helperBoard.loadFromFen(fen);
                 Search helper = new Search(helperBoard, transpositionTable);
                 helper.setStopTime(stopTime);
@@ -190,9 +191,11 @@ public class Search {
     }
 
     int searchRoot(int depth, int alpha, int beta) {
-        List<Move> moves = board.legalMoves();
+        // Use pre-allocated buffer for root (ply 0)
+        int[] moves = moveBuffer[0];
+        int count = board.generateLegalMoves(moves);
 
-        if (moves.isEmpty()) {
+        if (count == 0) {
             return board.isMated() ? -MATE_SCORE : 0;
         }
 
@@ -200,25 +203,25 @@ public class Search {
         long zobristHash = board.getZobristKey();
 
         // Get hash move from transposition table
-        Move hashMove = moveOrdering.getHashMove(zobristHash);
+        int hashMove = moveOrdering.getHashMove(zobristHash);
 
         int bestScore = -INFINITY;
-        Move localBestMove = null;
+        int localBestMove = 0;
         int originalAlpha = alpha;
 
         // Use pickBestMove for advanced move ordering
-        for (int i = 0; i < moves.size(); i++) {
+        for (int i = 0; i < count; i++) {
             if (stopped) {
                 break;
             }
 
             // Pick best remaining move and swap to position i
-            moveOrdering.pickBestMove(board, moves, i, hashMove, 0);
-            Move move = moves.get(i);
+            moveOrdering.pickBestMove(board, moves, count, i, hashMove, 0);
+            int move = moves[i];
 
-            board.doMove(move);
+            board.makeMove(move);
             int score = -alphaBeta(-beta, -alpha, depth - 1, 1);
-            board.undoMove();
+            board.unmakeMove(move);
 
             if (stopped) {
                 break;
@@ -238,7 +241,7 @@ public class Search {
         }
 
         // Store result in transposition table
-        if (!stopped && localBestMove != null) {
+        if (!stopped && localBestMove != 0) {
             bestMoveFound = localBestMove;
             int flag = TranspositionTable.TTEntry.EXACT;
             if (bestScore <= originalAlpha) {
@@ -271,6 +274,10 @@ public class Search {
         }
 
         nodesSearched++;
+        
+        if (ply > MAX_DEPTH) {
+            return Evaluator.evaluate(board);
+        }
 
         // Get Zobrist hash for current position
         long zobristHash = board.getZobristKey();
@@ -317,13 +324,14 @@ public class Search {
 
         // Depth 0: switch to quiescence search
         if (depth <= 0) {
-            return quiescence(alpha, beta);
+            return quiescence(alpha, beta, ply);
         }
 
-        List<Move> moves = board.legalMoves();
+        int[] moves = moveBuffer[ply];
+        int count = board.generateLegalMoves(moves);
 
         // Terminal node (checkmate or stalemate)
-        if (moves.isEmpty()) {
+        if (count == 0) {
             if (board.isMated()) {
                 return -MATE_SCORE + (MAX_DEPTH - depth); // Prefer faster mates
             }
@@ -331,25 +339,25 @@ public class Search {
         }
 
         // Get hash move from TT
-        Move hashMove = ttEntry != null ? ttEntry.bestMove : null;
+        int hashMove = ttEntry != null ? ttEntry.bestMove : 0;
 
         int bestScore = -INFINITY;
-        Move bestMove = null;
+        int bestMove = 0;
         int originalAlpha = alpha;
 
         boolean inCheck = board.isKingAttacked();
 
         // Use pickBestMove for advanced move ordering
-        for (int i = 0; i < moves.size(); i++) {
+        for (int i = 0; i < count; i++) {
             if (stopped) {
                 break;
             }
 
             // Pick best remaining move and swap to position i
-            moveOrdering.pickBestMove(board, moves, i, hashMove, ply);
-            Move move = moves.get(i);
+            moveOrdering.pickBestMove(board, moves, count, i, hashMove, ply);
+            int move = moves[i];
 
-            board.doMove(move);
+            board.makeMove(move);
 
             int score;
 
@@ -358,9 +366,7 @@ public class Search {
                 score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
             } else {
                 // Late moves: Null Window Search (PVS)
-                // Search with (alpha, alpha + 1)
-
-                // Interaction with LMR: apply primarily during the Null Window search step
+                
                 int searchDepth = depth - 1;
 
                 // Check if LMR is applicable
@@ -369,39 +375,15 @@ public class Search {
                 }
 
                 // Search with Null Window (alpha, alpha+1)
-                // Note: -alpha - 1 corresponds to -beta in recursive call where beta = alpha + 1
                 score = -alphaBeta(-alpha - 1, -alpha, searchDepth, ply + 1);
 
-                // Re-Search: If score > alpha (move was actually good) AND score < beta, 
-                // search again with full window
+                // Re-Search
                 if (score > alpha && score < beta) {
                     score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
                 }
-
-                // Also, if LMR was used and it failed high (score >= beta), 
-                // or if it improved alpha but we only did re-search on (alpha < score < beta),
-                // we might need to handle the case where LMR failed high but was unsafe?
-                // The instructions say "Re-Search: If score > alpha ... AND score < beta".
-                // This implies we trust LMR beta cutoffs.
-
-                // However, if LMR returns score > alpha, and we didn't re-search (e.g. score >= beta),
-                // we are accepting the LMR result.
-
-                // Wait, if score > alpha (meaning score >= alpha+1 since integer), 
-                // and if we used reduced depth, isn't it better to re-verify?
-                // Standard PVS usually re-searches if (score > alpha).
-                // The instruction says "AND score < beta".
-
-                // What if score >= beta? We return beta (cutoff).
-                // If we used LMR, this is a "soft" cutoff.
-                // But the instructions don't ask to re-verify soft cutoffs.
-
-                // One edge case: If LMR was used, and score > alpha.
-                // If score < beta, we re-search with FULL depth (depth - 1). This is correct.
-                // If score >= beta, we cutoff.
             }
 
-            board.undoMove();
+            board.unmakeMove(move);
 
             if (stopped) {
                 break;
@@ -430,7 +412,7 @@ public class Search {
         }
 
         // Store result in transposition table
-        if (!stopped && bestMove != null) {
+        if (!stopped && bestMove != 0) {
             int flag;
             if (bestScore <= originalAlpha) {
                 flag = TranspositionTable.TTEntry.UPPER_BOUND;
@@ -447,59 +429,53 @@ public class Search {
      * Quiescence search: only search captures and checks until position is quiet.
      * Prevents horizon effect.
      */
-    private int quiescence(int alpha, int beta) {
-        // 1. Check time every 2048 nodes (bitwise AND is faster than modulo)
+    private int quiescence(int alpha, int beta, int ply) {
+        // 1. Check time every 2048 nodes
         if ((nodesSearched & 2047) == 0) {
             if (System.currentTimeMillis() >= stopTime) {
                 stopped = true;
-                return 0; // Return neutral score to exit quickly
+                return 0;
             }
         }
 
         nodesSearched++;
 
+        if (ply >= MAX_DEPTH) {
+            return Evaluator.evaluate(board);
+        }
+
         // Stand-pat: evaluate current position
-        BoardStatus fastBoard = new BoardStatus(board);
-        int standPat = Evaluator.evaluate(fastBoard);
+        int standPat = Evaluator.evaluate(board);
 
         if (standPat >= beta) {
             return beta;
         }
 
         // DELTA PRUNING
-        // huge margin (900 for Queen) + 200 safety for positional factors
-        int BIG_DELTA = 900 + 200;
-        if (standPat < alpha - BIG_DELTA) {
-            // If we are so far behind that even a Queen capture won't help,
-            // we can likely prune, BUT we must search promotions.
-            // This is a "lazy" impl; sophisticated engines calc precise material gain.
-            // For now, simply return alpha is risky without precise calculation,
-            // so standard Delta Pruning is:
-            // If (standPat + capturedPieceValue + 200 < alpha) continue;
-        }
-
         if (alpha < standPat) {
             alpha = standPat;
         }
 
         // Generate and search only tactical moves (captures)
-        List<Move> moves = board.legalMoves();
-
-        for (Move move : moves) {
-            // Only consider captures and promotions
+        int[] moves = moveBuffer[ply];
+        int count = board.generateLegalMoves(moves);
+        
+        for (int i = 0; i < count; i++) {
+            int move = moves[i];
+             // Only consider captures and promotions
             if (!isCapture(move) && !isPromotion(move)) {
                 continue;
             }
 
             // Delta Pruning
             if (!isPromotion(move) && isCapture(move)) {
-                Piece captured = board.getPiece(move.getTo());
+                Piece captured = board.getPieceAt(SQUARES[Bitboard.getTo(move)]);
                 int capturedValue = getPieceValue(captured);
                 if (standPat + capturedValue + 200 < alpha) {
                     continue;
                 }
             }
-
+            
             // SEE Pruning for bad captures
             if (isCapture(move) && !isPromotion(move)) {
                 int seeScore = StaticExchangeEvaluator.see(board, move);
@@ -507,61 +483,38 @@ public class Search {
                     continue;
                 }
             }
-
-            if (stopped) {
-                break;
-            }
-
-            board.doMove(move);
-            int score = -quiescence(-beta, -alpha);
-            board.undoMove();
-
-            if (stopped) {
-                break;
-            }
-
-            if (score >= beta) {
-                return beta;
-            }
-
-            if (score > alpha) {
-                alpha = score;
-            }
+            
+            board.makeMove(move);
+            int score = -quiescence(-beta, -alpha, ply + 1);
+            board.unmakeMove(move);
+            
+            if (stopped) break;
+            
+            if (score >= beta) return beta;
+            if (score > alpha) alpha = score;
         }
-
         return alpha;
     }
 
-    /**
-     * Check if move is a capture.
-     */
-    private boolean isCapture(Move move) {
-        return board.getPiece(move.getTo()) != com.github.bhlangonijr.chesslib.Piece.NONE;
+    private boolean isCapture(int move) {
+        int to = Bitboard.getTo(move);
+        return board.getPieceAt(SQUARES[to]) != Piece.NONE;
     }
 
-    /**
-     * Check if move is a promotion.
-     */
-    private boolean isPromotion(Move move) {
-        return move.getPromotion() != com.github.bhlangonijr.chesslib.Piece.NONE;
+    private boolean isPromotion(int move) {
+        return Bitboard.getPromo(move) != 0;
     }
 
-    /**
-     * Get number of nodes searched.
-     */
     public int getNodesSearched() {
         return nodesSearched;
     }
 
-    /**
-     * Get depth reached during iterative deepening.
-     */
     public int getDepthReached() {
         return depthReached;
     }
 
     private int getPieceValue(Piece piece) {
-        if (piece == null) {
+        if (piece == null || piece == Piece.NONE) {
             return 0;
         }
         return switch (piece.getPieceType()) {

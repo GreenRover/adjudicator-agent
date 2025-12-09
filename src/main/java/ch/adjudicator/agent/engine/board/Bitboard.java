@@ -12,7 +12,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Bitboard implements BoardInterface {
+public class Bitboard {
 
     private static final Square[] SQUARES = Square.values();
     private static final Piece[] PIECES = Piece.values();
@@ -41,12 +41,14 @@ public class Bitboard implements BoardInterface {
         }
     }
 
-    private final long[] pieces;
     private final Piece[] mailbox;
 
-    private long whitePieces;
-    private long blackPieces;
-    private long occupiedSquares;
+    public long whitePieces;
+    public long blackPieces;
+    public long occupiedSquares;
+
+    public long whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens, whiteKing;
+    public long blackPawns, blackKnights, blackBishops, blackRooks, blackQueens, blackKing;
 
     private int whiteKingSq = -1;
     private int blackKingSq = -1;
@@ -82,14 +84,14 @@ public class Bitboard implements BoardInterface {
         for (int i = 0; i < MAX_GAME_MOVES; i++) {
             history[i] = new StateHistory();
         }
-        pieces = new long[PIECES.length];
         mailbox = new Piece[64];
         // Initialize with standard start position
         loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     }
 
     public void clear() {
-        Arrays.fill(pieces, 0L);
+        whitePawns = 0L; whiteKnights = 0L; whiteBishops = 0L; whiteRooks = 0L; whiteQueens = 0L; whiteKing = 0L;
+        blackPawns = 0L; blackKnights = 0L; blackBishops = 0L; blackRooks = 0L; blackQueens = 0L; blackKing = 0L;
         Arrays.fill(mailbox, Piece.NONE);
         whitePieces = 0L;
         blackPieces = 0L;
@@ -112,7 +114,20 @@ public class Bitboard implements BoardInterface {
         int sqIdx = sq.ordinal();
         long bit = 1L << sqIdx;
 
-        pieces[piece.ordinal()] |= bit;
+        switch (piece) {
+            case WHITE_PAWN -> whitePawns |= bit;
+            case WHITE_KNIGHT -> whiteKnights |= bit;
+            case WHITE_BISHOP -> whiteBishops |= bit;
+            case WHITE_ROOK -> whiteRooks |= bit;
+            case WHITE_QUEEN -> whiteQueens |= bit;
+            case WHITE_KING -> whiteKing |= bit;
+            case BLACK_PAWN -> blackPawns |= bit;
+            case BLACK_KNIGHT -> blackKnights |= bit;
+            case BLACK_BISHOP -> blackBishops |= bit;
+            case BLACK_ROOK -> blackRooks |= bit;
+            case BLACK_QUEEN -> blackQueens |= bit;
+            case BLACK_KING -> blackKing |= bit;
+        }
 
         if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) {
             whitePieces |= bit;
@@ -133,7 +148,20 @@ public class Bitboard implements BoardInterface {
         long bit = 1L << sqIdx;
         long mask = ~bit;
 
-        pieces[p.ordinal()] &= mask;
+        switch (p) {
+            case WHITE_PAWN -> whitePawns &= mask;
+            case WHITE_KNIGHT -> whiteKnights &= mask;
+            case WHITE_BISHOP -> whiteBishops &= mask;
+            case WHITE_ROOK -> whiteRooks &= mask;
+            case WHITE_QUEEN -> whiteQueens &= mask;
+            case WHITE_KING -> whiteKing &= mask;
+            case BLACK_PAWN -> blackPawns &= mask;
+            case BLACK_KNIGHT -> blackKnights &= mask;
+            case BLACK_BISHOP -> blackBishops &= mask;
+            case BLACK_ROOK -> blackRooks &= mask;
+            case BLACK_QUEEN -> blackQueens &= mask;
+            case BLACK_KING -> blackKing &= mask;
+        }
 
         if (PIECE_SIDES[p.ordinal()] == Side.WHITE) {
             whitePieces &= mask;
@@ -150,7 +178,6 @@ public class Bitboard implements BoardInterface {
         return mailbox[sq.ordinal()];
     }
 
-    @Override
     public void loadFromFen(String fen) {
         clear();
         String[] parts = fen.split(" ");
@@ -234,7 +261,6 @@ public class Bitboard implements BoardInterface {
         };
     }
 
-    @Override
     public String getFen() {
         StringBuilder sb = new StringBuilder();
         for (int rank = 7; rank >= 0; rank--) {
@@ -298,12 +324,10 @@ public class Bitboard implements BoardInterface {
         };
     }
 
-    @Override
     public long getZobristKey() {
         return zobristHash;
     }
 
-    @Override
     public Side getSideToMove() {
         return sideToMove;
     }
@@ -475,7 +499,22 @@ public class Bitboard implements BoardInterface {
 
     private void putPieceInternal(Piece piece, int sqIdx) {
         long bit = 1L << sqIdx;
-        pieces[piece.ordinal()] |= bit;
+
+        switch (piece) {
+            case WHITE_PAWN -> whitePawns |= bit;
+            case WHITE_KNIGHT -> whiteKnights |= bit;
+            case WHITE_BISHOP -> whiteBishops |= bit;
+            case WHITE_ROOK -> whiteRooks |= bit;
+            case WHITE_QUEEN -> whiteQueens |= bit;
+            case WHITE_KING -> whiteKing |= bit;
+            case BLACK_PAWN -> blackPawns |= bit;
+            case BLACK_KNIGHT -> blackKnights |= bit;
+            case BLACK_BISHOP -> blackBishops |= bit;
+            case BLACK_ROOK -> blackRooks |= bit;
+            case BLACK_QUEEN -> blackQueens |= bit;
+            case BLACK_KING -> blackKing |= bit;
+        }
+
         if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) {
             whitePieces |= bit;
             if (piece == Piece.WHITE_KING) whiteKingSq = sqIdx;
@@ -490,7 +529,22 @@ public class Bitboard implements BoardInterface {
     private void removePieceInternal(Piece piece, int sqIdx) {
         long bit = 1L << sqIdx;
         long mask = ~bit;
-        pieces[piece.ordinal()] &= mask;
+
+        switch (piece) {
+            case WHITE_PAWN -> whitePawns &= mask;
+            case WHITE_KNIGHT -> whiteKnights &= mask;
+            case WHITE_BISHOP -> whiteBishops &= mask;
+            case WHITE_ROOK -> whiteRooks &= mask;
+            case WHITE_QUEEN -> whiteQueens &= mask;
+            case WHITE_KING -> whiteKing &= mask;
+            case BLACK_PAWN -> blackPawns &= mask;
+            case BLACK_KNIGHT -> blackKnights &= mask;
+            case BLACK_BISHOP -> blackBishops &= mask;
+            case BLACK_ROOK -> blackRooks &= mask;
+            case BLACK_QUEEN -> blackQueens &= mask;
+            case BLACK_KING -> blackKing &= mask;
+        }
+
         if (PIECE_SIDES[piece.ordinal()] == Side.WHITE) {
             whitePieces &= mask;
         } else {
@@ -500,7 +554,6 @@ public class Bitboard implements BoardInterface {
         mailbox[sqIdx] = Piece.NONE;
     }
 
-    @Override
     public boolean doMove(Move move) {
         int from = move.getFrom().ordinal();
         int to = move.getTo().ordinal();
@@ -517,7 +570,6 @@ public class Bitboard implements BoardInterface {
         return true;
     }
 
-    @Override
     public Move undoMove() {
         if (historyPly > 0) {
             int move = history[historyPly - 1].move;
@@ -610,7 +662,6 @@ public class Bitboard implements BoardInterface {
         }
     }
 
-    @Override
     public List<Move> legalMoves() {
         int[] moves = new int[256];
         int count = generateLegalMoves(moves);
@@ -717,30 +768,30 @@ public class Bitboard implements BoardInterface {
 
     private boolean isSquareAttackedVirtual(int sq, Side attackerSide, long occupied, long ignoreMask) {
         if (attackerSide == Side.WHITE) {
-            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & pieces[Piece.WHITE_PAWN.ordinal()] & ignoreMask) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.WHITE_KNIGHT.ordinal()] & ignoreMask) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.WHITE_KING.ordinal()] & ignoreMask) != 0) return true;
+            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & whitePawns & ignoreMask) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & whiteKnights & ignoreMask) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & whiteKing & ignoreMask) != 0) return true;
 
-            long bishopsQueens = (pieces[Piece.WHITE_BISHOP.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()]) & ignoreMask;
+            long bishopsQueens = (whiteBishops | whiteQueens) & ignoreMask;
             if (bishopsQueens != 0) {
                 if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
             }
 
-            long rooksQueens = (pieces[Piece.WHITE_ROOK.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()]) & ignoreMask;
+            long rooksQueens = (whiteRooks | whiteQueens) & ignoreMask;
             if (rooksQueens != 0) {
                 if ((AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
             }
         } else {
-            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & pieces[Piece.BLACK_PAWN.ordinal()] & ignoreMask) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.BLACK_KNIGHT.ordinal()] & ignoreMask) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.BLACK_KING.ordinal()] & ignoreMask) != 0) return true;
+            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & blackPawns & ignoreMask) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & blackKnights & ignoreMask) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & blackKing & ignoreMask) != 0) return true;
 
-            long bishopsQueens = (pieces[Piece.BLACK_BISHOP.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()]) & ignoreMask;
+            long bishopsQueens = (blackBishops | blackQueens) & ignoreMask;
             if (bishopsQueens != 0) {
                 if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
             }
 
-            long rooksQueens = (pieces[Piece.BLACK_ROOK.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()]) & ignoreMask;
+            long rooksQueens = (blackRooks | blackQueens) & ignoreMask;
             if (rooksQueens != 0) {
                 if ((AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
             }
@@ -748,7 +799,6 @@ public class Bitboard implements BoardInterface {
         return false;
     }
 
-    @Override
     public boolean doNullMove() {
         StateHistory state = history[historyPly];
         state.move = 0;
@@ -779,7 +829,6 @@ public class Bitboard implements BoardInterface {
         return true;
     }
 
-    @Override
     public boolean isMated() {
         if (!isKingAttacked()) return false;
         int[] moves = new int[256];
@@ -790,39 +839,35 @@ public class Bitboard implements BoardInterface {
     public boolean isSquareAttacked(int sq, Side attackerSide) {
         long occ = occupiedSquares;
         if (attackerSide == Side.WHITE) {
-            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & pieces[Piece.WHITE_PAWN.ordinal()]) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.WHITE_KNIGHT.ordinal()]) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.WHITE_KING.ordinal()]) != 0) return true;
-            if ((AttackLookups.getBishopAttacks(sq, occ) & (pieces[Piece.WHITE_BISHOP.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()])) != 0) return true;
-            if ((AttackLookups.getRookAttacks(sq, occ) & (pieces[Piece.WHITE_ROOK.ordinal()] | pieces[Piece.WHITE_QUEEN.ordinal()])) != 0) return true;
+            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & whitePawns) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & whiteKnights) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & whiteKing) != 0) return true;
+            if ((AttackLookups.getBishopAttacks(sq, occ) & (whiteBishops | whiteQueens)) != 0) return true;
+            if ((AttackLookups.getRookAttacks(sq, occ) & (whiteRooks | whiteQueens)) != 0) return true;
         } else {
-            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & pieces[Piece.BLACK_PAWN.ordinal()]) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & pieces[Piece.BLACK_KNIGHT.ordinal()]) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & pieces[Piece.BLACK_KING.ordinal()]) != 0) return true;
-            if ((AttackLookups.getBishopAttacks(sq, occ) & (pieces[Piece.BLACK_BISHOP.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()])) != 0) return true;
-            if ((AttackLookups.getRookAttacks(sq, occ) & (pieces[Piece.BLACK_ROOK.ordinal()] | pieces[Piece.BLACK_QUEEN.ordinal()])) != 0) return true;
+            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & blackPawns) != 0) return true;
+            if ((AttackLookups.KNIGHT_ATTACKS[sq] & blackKnights) != 0) return true;
+            if ((AttackLookups.KING_ATTACKS[sq] & blackKing) != 0) return true;
+            if ((AttackLookups.getBishopAttacks(sq, occ) & (blackBishops | blackQueens)) != 0) return true;
+            if ((AttackLookups.getRookAttacks(sq, occ) & (blackRooks | blackQueens)) != 0) return true;
         }
         return false;
     }
 
-    @Override
     public boolean isKingAttacked() {
         int kingSq = (sideToMove == Side.WHITE) ? whiteKingSq : blackKingSq;
         if (kingSq == -1) return false;
         return isSquareAttacked(kingSq, sideToMove == Side.WHITE ? Side.BLACK : Side.WHITE);
     }
 
-    @Override
     public Piece getPiece(Square square) {
         return mailbox[square.ordinal()];
     }
 
-    @Override
     public Square getEnPassant() {
         return enPassantSquare;
     }
 
-    @Override
     public CastleRight getCastleRight(Side side) {
         if (side == Side.WHITE) {
             boolean k = (castlingRights & CASTLE_WK) != 0;
@@ -841,56 +886,68 @@ public class Bitboard implements BoardInterface {
         }
     }
 
-    @Override
     public long getBitboard(Side side) {
         if (side == Side.WHITE) return whitePieces;
         if (side == Side.BLACK) return blackPieces;
         return 0L;
     }
 
-    @Override
     public long getBitboard(Piece piece) {
-        if (piece == Piece.NONE) return 0L;
-        return pieces[piece.ordinal()];
+        return switch (piece) {
+            case WHITE_PAWN -> whitePawns;
+            case WHITE_KNIGHT -> whiteKnights;
+            case WHITE_BISHOP -> whiteBishops;
+            case WHITE_ROOK -> whiteRooks;
+            case WHITE_QUEEN -> whiteQueens;
+            case WHITE_KING -> whiteKing;
+            case BLACK_PAWN -> blackPawns;
+            case BLACK_KNIGHT -> blackKnights;
+            case BLACK_BISHOP -> blackBishops;
+            case BLACK_ROOK -> blackRooks;
+            case BLACK_QUEEN -> blackQueens;
+            case BLACK_KING -> blackKing;
+            default -> 0L;
+        };
     }
 
     public int generatePseudoLegalMoves(int[] moveList) {
         int index = 0;
         long friendly, enemy;
-        int pawnIdx, knightIdx, bishopIdx, rookIdx, queenIdx, kingIdx;
-        int promoRank, doublePushRank, startRank;
+        long myPawns, myKnights, myBishops, myRooks, myQueens, myKing;
+        
+        int promoRank, startRank;
         boolean isWhite = (sideToMove == Side.WHITE);
 
         if (isWhite) {
             friendly = whitePieces;
             enemy = blackPieces;
-            pawnIdx = 0; // WHITE_PAWN
-            knightIdx = 1;
-            bishopIdx = 2;
-            rookIdx = 3;
-            queenIdx = 4;
-            kingIdx = 5;
+            myPawns = whitePawns;
+            myKnights = whiteKnights;
+            myBishops = whiteBishops;
+            myRooks = whiteRooks;
+            myQueens = whiteQueens;
+            myKing = whiteKing;
+            
             promoRank = 7;
             startRank = 1;
-            doublePushRank = 3;
         } else {
             friendly = blackPieces;
             enemy = whitePieces;
-            pawnIdx = 6; // BLACK_PAWN
-            knightIdx = 7;
-            bishopIdx = 8;
-            rookIdx = 9;
-            queenIdx = 10;
-            kingIdx = 11;
+            myPawns = blackPawns;
+            myKnights = blackKnights;
+            myBishops = blackBishops;
+            myRooks = blackRooks;
+            myQueens = blackQueens;
+            myKing = blackKing;
+            
             promoRank = 0;
             startRank = 6;
-            doublePushRank = 4;
         }
 
         long occupied = occupiedSquares;
 
         // --- Pawns ---
-        long p = pieces[pawnIdx];
+        long p = myPawns;
         while (p != 0) {
             int sq = Long.numberOfTrailingZeros(p);
             p &= p - 1;
@@ -935,7 +992,7 @@ public class Bitboard implements BoardInterface {
         }
 
         // --- Knights ---
-        long n = pieces[knightIdx];
+        long n = myKnights;
         while (n != 0) {
             int sq = Long.numberOfTrailingZeros(n);
             n &= n - 1;
@@ -948,7 +1005,7 @@ public class Bitboard implements BoardInterface {
         }
 
         // --- Bishops ---
-        long b = pieces[bishopIdx];
+        long b = myBishops;
         while (b != 0) {
             int sq = Long.numberOfTrailingZeros(b);
             b &= b - 1;
@@ -961,7 +1018,7 @@ public class Bitboard implements BoardInterface {
         }
 
         // --- Rooks ---
-        long r = pieces[rookIdx];
+        long r = myRooks;
         while (r != 0) {
             int sq = Long.numberOfTrailingZeros(r);
             r &= r - 1;
@@ -974,7 +1031,7 @@ public class Bitboard implements BoardInterface {
         }
 
         // --- Queens ---
-        long q = pieces[queenIdx];
+        long q = myQueens;
         while (q != 0) {
             int sq = Long.numberOfTrailingZeros(q);
             q &= q - 1;
@@ -987,7 +1044,7 @@ public class Bitboard implements BoardInterface {
         }
 
         // --- King ---
-        long k = pieces[kingIdx];
+        long k = myKing;
         while (k != 0) {
             int sq = Long.numberOfTrailingZeros(k);
             k &= k - 1;
@@ -1044,5 +1101,17 @@ public class Bitboard implements BoardInterface {
 
     public static int encodeMove(int from, int to, int promo) {
         return from | (to << 6) | (promo << 12);
+    }
+
+    public static int getFrom(int move) {
+        return move & 0x3F;
+    }
+
+    public static int getTo(int move) {
+        return (move >> 6) & 0x3F;
+    }
+
+    public static int getPromo(int move) {
+        return (move >> 12) & 7;
     }
 }

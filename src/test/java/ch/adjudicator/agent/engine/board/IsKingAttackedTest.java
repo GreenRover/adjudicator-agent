@@ -13,16 +13,8 @@ class IsKingAttackedTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testIsKingAttackedChesslib(String fen, boolean expectedAttacked) {
-        BoardInterface board = new ChesslibBoard();
-        board.loadFromFen(fen);
-        assertEquals(expectedAttacked, board.isKingAttacked(), "Failed for FEN: " + fen);
-    }
-
-    @ParameterizedTest
-    @MethodSource("provideFens")
     void testIsKingAttackedBitboard(String fen, boolean expectedAttacked) {
-        BoardInterface board = new Bitboard();
+        Bitboard board = new Bitboard();
         board.loadFromFen(fen);
         assertEquals(expectedAttacked, board.isKingAttacked(), "Failed for FEN: " + fen);
     }

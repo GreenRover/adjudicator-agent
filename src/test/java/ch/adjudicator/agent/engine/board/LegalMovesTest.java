@@ -18,17 +18,8 @@ class LegalMovesTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testLegalMovesChesslib(String fen, boolean expectedHasMoves) {
-        BoardInterface board = new ChesslibBoard();
-        board.loadFromFen(fen);
-        boolean hasMoves = !board.legalMoves().isEmpty();
-        assertEquals(expectedHasMoves, hasMoves, "Failed for FEN: " + fen);
-    }
-
-    @ParameterizedTest
-    @MethodSource("provideFens")
     void testLegalMovesBitboard(String fen, boolean expectedHasMoves) {
-        BoardInterface board = new Bitboard();
+        Bitboard board = new Bitboard();
         board.loadFromFen(fen);
         boolean hasMoves = !board.legalMoves().isEmpty();
         assertEquals(expectedHasMoves, hasMoves, "Failed for FEN: " + fen);
@@ -37,7 +28,7 @@ class LegalMovesTest {
     @Test
     void testSpecificIllegalMove() {
         String fen = "4r1k1/2b1rpp1/2pq2bp/p2p4/3RnP2/PPN1PN1P/1BP1Q1P1/4R1K1 b - - 1 24";
-        BoardInterface board = new Bitboard();
+        Bitboard board = new Bitboard();
         board.loadFromFen(fen);
         List<String> moves = board.legalMoves().stream()
                 .map(Object::toString)

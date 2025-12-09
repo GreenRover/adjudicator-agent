@@ -1,10 +1,12 @@
 package ch.adjudicator.agent;
 
-import ch.adjudicator.agent.engine.*;
+import ch.adjudicator.agent.engine.PolyglotBook;
+import ch.adjudicator.agent.engine.Search;
+import ch.adjudicator.agent.engine.TimeManager;
+import ch.adjudicator.agent.engine.TranspositionTable;
 import ch.adjudicator.agent.engine.board.Bitboard;
-import ch.adjudicator.agent.engine.board.BoardInterface;
-import ch.adjudicator.agent.engine.board.ChesslibBoard;
 import ch.adjudicator.client.*;
+import com.github.bhlangonijr.chesslib.Square;
 import com.github.bhlangonijr.chesslib.move.Move;
 import lombok.Getter;
 import org.slf4j.Logger;
@@ -23,7 +25,7 @@ public class ProAgent implements Agent {
     private final String name;
     private final TranspositionTable transpositionTable;
     private final CpuTemperatureMonitor temperatureMonitor;
-    private BoardInterface board;
+    private Bitboard board;
     private PolyglotBook bookPerfect;
     private PolyglotBook bookCerebellum;
     private Color myColor;
@@ -136,7 +138,7 @@ public class ProAgent implements Agent {
             throw new Exception("No legal moves available");
         }
 
-        Move selectedMove = null;
+        int selectedMove = 0;
         lastMoveFromBook = false;
 
         // 1. Try opening book first
@@ -159,7 +161,7 @@ public class ProAgent implements Agent {
                     // Verify book move is legal
                     for (Move legal : legalMoves) {
                         if (moveToLAN(legal).equals(bookMoveStr)) {
-                            selectedMove = legal;
+                            selectedMove = encodeMove(legal);
                             lastMoveFromBook = true;
                             LOGGER.info("[{}] Using book move: {}", name, bookMoveStr);
                             break;
@@ -186,7 +188,7 @@ public class ProAgent implements Agent {
         }
 
         // 2. If not in book, use search
-        if (selectedMove == null) {
+        if (selectedMove == 0) {
             // Allocate time for this move
             long allocatedTime = timeManager.allocateTime(request.getYourTimeMs(), moveCount);
             LOGGER.info("[{}] Allocated time: {}ms", name, allocatedTime);
@@ -199,17 +201,17 @@ public class ProAgent implements Agent {
 
             LOGGER.info("[{}] Search complete: {}ms, {} nodes, move: {}, depth: {}",
                     name, searchTime, search.getNodesSearched(),
-                    selectedMove != null ? moveToLAN(selectedMove) : "null", search.getDepthReached());
+                    selectedMove != 0 ? moveToLAN(selectedMove) : "null", search.getDepthReached());
 
-            if (selectedMove == null) {
+            if (selectedMove == 0) {
                 // Fallback: pick first legal move
                 LOGGER.warn("[{}] Search returned null, using fallback", name);
-                selectedMove = legalMoves.getFirst();
+                selectedMove = encodeMove(legalMoves.getFirst());
             }
         }
 
         // Apply move to board
-        board.doMove(selectedMove);
+        board.makeMove(selectedMove);
 
         String moveStr = moveToLAN(selectedMove);
         LOGGER.info("[{}] Playing: {} (from {} legal moves)", name, moveStr, legalMoves.size());
@@ -217,13 +219,13 @@ public class ProAgent implements Agent {
         // Start pondering (only if CPU temperature is safe)
         if (temperatureMonitor == null || temperatureMonitor.isSafeForPondering()) {
             long zobristHash = board.getZobristKey();
-            Move ponderMove = transpositionTable.getBestMove(zobristHash);
+            int ponderMove = transpositionTable.getBestMove(zobristHash);
 
-            if (ponderMove != null) {
+            if (ponderMove != 0) {
                 LOGGER.info("[{}] Pondering on {}", name, moveToLAN(ponderMove));
-                BoardInterface ponderBoard = new Bitboard();
+                Bitboard ponderBoard = new Bitboard();
                 ponderBoard.loadFromFen(board.getFen());
-                ponderBoard.doMove(ponderMove);
+                ponderBoard.makeMove(ponderMove);
 
                 ponderSearch = new Search(ponderBoard, transpositionTable);
                 ponderThread = new Thread(() -> {
@@ -309,6 +311,40 @@ public class ProAgent implements Agent {
      */
     private String moveToLAN(Move move) {
         return move.toString().toLowerCase();
+    }
+
+    private String moveToLAN(int move) {
+        if (move == 0) return "0000";
+        Square from = Square.values()[Bitboard.getFrom(move)];
+        Square to = Square.values()[Bitboard.getTo(move)];
+        int promo = Bitboard.getPromo(move);
+        
+        StringBuilder sb = new StringBuilder();
+        sb.append(from.toString().toLowerCase());
+        sb.append(to.toString().toLowerCase());
+        
+        if (promo != 0) {
+            switch(promo) {
+                 case 1 -> sb.append("n");
+                 case 2 -> sb.append("b");
+                 case 3 -> sb.append("r");
+                 case 4 -> sb.append("q");
+            }
+        }
+        return sb.toString();
+    }
+
+    private int encodeMove(Move move) {
+        int promo = 0;
+        if (move.getPromotion() != com.github.bhlangonijr.chesslib.Piece.NONE) {
+            // Map piece to 1-4
+            String p = move.getPromotion().getPieceType().toString();
+            if (p.equals("KNIGHT")) promo = 1;
+            else if (p.equals("BISHOP")) promo = 2;
+            else if (p.equals("ROOK")) promo = 3;
+            else if (p.equals("QUEEN")) promo = 4;
+        }
+        return Bitboard.encodeMove(move.getFrom().ordinal(), move.getTo().ordinal(), promo);
     }
 
     private void stopPondering() {

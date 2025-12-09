@@ -1,7 +1,7 @@
 package ch.adjudicator.agent.engine;
 
+import ch.adjudicator.agent.engine.board.Bitboard;
 import com.github.bhlangonijr.chesslib.Square;
-import com.github.bhlangonijr.chesslib.move.Move;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,7 +13,7 @@ public class TranspositionTableTest {
     public void testStoreAndProbe() {
         TranspositionTable tt = new TranspositionTable(1024);
         long key = 12345L;
-        Move move = new Move(Square.E2, Square.E4);
+        int move = Bitboard.encodeMove(Square.E2.ordinal(), Square.E4.ordinal(), 0);
         int score = 100;
         int depth = 5;
         int flag = TranspositionTable.TTEntry.EXACT;
@@ -35,7 +35,7 @@ public class TranspositionTableTest {
         // Use a key that maps to index 0 (assuming sizeMask works as expected)
         // Or just rely on one key.
         long key1 = 10L;
-        Move move1 = new Move(Square.A2, Square.A3);
+        int move1 = Bitboard.encodeMove(Square.A2.ordinal(), Square.A3.ordinal(), 0);
 
         // 1. Store Deep entry (depth 10)
         tt.store(key1, move1, 100, 10, TranspositionTable.TTEntry.EXACT);
@@ -67,8 +67,8 @@ public class TranspositionTableTest {
         long key1 = 4L; // Index 0 (4 & 1 = 0)
         long key2 = 6L; // Index 0 (6 & 1 = 0) -> Collision
 
-        Move move1 = new Move(Square.A2, Square.A3);
-        Move move2 = new Move(Square.B2, Square.B3);
+        int move1 = Bitboard.encodeMove(Square.A2.ordinal(), Square.A3.ordinal(), 0);
+        int move2 = Bitboard.encodeMove(Square.B2.ordinal(), Square.B3.ordinal(), 0);
 
         // 1. Store Key1 at Depth 10.
         tt.store(key1, move1, 100, 10, TranspositionTable.TTEntry.EXACT);

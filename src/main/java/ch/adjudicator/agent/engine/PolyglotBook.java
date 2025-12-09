@@ -1,6 +1,6 @@
 package ch.adjudicator.agent.engine;
 
-import ch.adjudicator.agent.engine.board.BoardInterface;
+import ch.adjudicator.agent.engine.board.Bitboard;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -43,7 +43,7 @@ public class PolyglotBook {
                 long key = bb.getLong();
                 int move = bb.getShort() & 0xFFFF;
                 int weight = bb.getShort() & 0xFFFF;
-                int learn = bb.getInt();
+                //int learn = bb.getInt();
 
                 entries.add(new BookEntry(key, move, weight));
             }
@@ -115,12 +115,8 @@ public class PolyglotBook {
         return moves;
     }
 
-    public BookEntry getBestMove(BoardInterface board) {
+    public BookEntry getBestMove(Bitboard board) {
         return getBestMove(ZobristHasher.getZobristKey(board));
-    }
-
-    public BookEntry getBestMove(String fen) {
-        return getBestMove(ZobristHasher.getZobristKey(fen));
     }
 
     /**

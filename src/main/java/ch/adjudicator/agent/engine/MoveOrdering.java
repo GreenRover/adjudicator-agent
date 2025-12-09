@@ -1,11 +1,8 @@
 package ch.adjudicator.agent.engine;
 
-import ch.adjudicator.agent.engine.board.BoardInterface;
+import ch.adjudicator.agent.engine.board.Bitboard;
 import com.github.bhlangonijr.chesslib.Piece;
-import com.github.bhlangonijr.chesslib.move.Move;
-
-import java.util.Collections;
-import java.util.List;
+import com.github.bhlangonijr.chesslib.Square;
 
 /**
  * Advanced move ordering using the "Golden Standard Strategy":
@@ -17,6 +14,7 @@ import java.util.List;
  */
 public class MoveOrdering {
     private static final int MAX_DEPTH = 64;
+    private static final Square[] SQUARES = Square.values();
 
     // MVV-LVA: Most Valuable Victim - Least Valuable Aggressor
     private static final int[][] MVV_LVA_SCORES = new int[7][7];
@@ -32,7 +30,7 @@ public class MoveOrdering {
     }
 
     // Killer moves: 2 per ply
-    private final Move[][] killerMoves = new Move[MAX_DEPTH][2];
+    private final int[][] killerMoves = new int[MAX_DEPTH][2];
     // History heuristic: [from_square][to_square]
     private final int[][] historyScores = new int[64][64];
     // Transposition Table reference
@@ -49,8 +47,8 @@ public class MoveOrdering {
      */
     public void clearKillers() {
         for (int i = 0; i < MAX_DEPTH; i++) {
-            killerMoves[i][0] = null;
-            killerMoves[i][1] = null;
+            killerMoves[i][0] = 0;
+            killerMoves[i][1] = 0;
         }
     }
 
@@ -68,11 +66,11 @@ public class MoveOrdering {
     /**
      * Update killer move when a beta cutoff occurs on a quiet move.
      */
-    public void updateKiller(Move move, int ply) {
-        if (ply >= MAX_DEPTH) return;
+    public void updateKiller(int move, int ply) {
+        if (ply >= MAX_DEPTH || move == 0) return;
 
         // Shift killers: move killer[0] to killer[1], new move to killer[0]
-        if (!move.equals(killerMoves[ply][0])) {
+        if (move != killerMoves[ply][0]) {
             killerMoves[ply][1] = killerMoves[ply][0];
             killerMoves[ply][0] = move;
         }
@@ -81,9 +79,10 @@ public class MoveOrdering {
     /**
      * Update history score when a move causes a cutoff.
      */
-    public void updateHistory(Move move, int depth) {
-        int from = move.getFrom().ordinal();
-        int to = move.getTo().ordinal();
+    public void updateHistory(int move, int depth) {
+        if (move == 0) return;
+        int from = Bitboard.getFrom(move);
+        int to = Bitboard.getTo(move);
 
         // Increment by depth squared * 10 (heavily weight deeper searches)
         historyScores[from][to] += depth * depth * 10;
@@ -102,9 +101,9 @@ public class MoveOrdering {
     /**
      * Check if move is a killer move at this ply.
      */
-    private boolean isKiller(Move move, int ply) {
+    private boolean isKiller(int move, int ply) {
         if (ply >= MAX_DEPTH) return false;
-        return move.equals(killerMoves[ply][0]) || move.equals(killerMoves[ply][1]);
+        return move == killerMoves[ply][0] || move == killerMoves[ply][1];
     }
 
     /**
@@ -127,85 +126,90 @@ public class MoveOrdering {
     /**
      * Calculate MVV-LVA score for a capture.
      */
-    private int getMvvLvaScore(BoardInterface board, Move move) {
-        Piece victim = board.getPiece(move.getTo());
-        Piece aggressor = board.getPiece(move.getFrom());
+    private int getMvvLvaScore(Bitboard board, int move) {
+        int from = Bitboard.getFrom(move);
+        int to = Bitboard.getTo(move);
+        Piece attacker = board.getPieceAt(SQUARES[from]);
+        Piece victim = board.getPieceAt(SQUARES[to]);
 
-        int victimIndex = getPieceIndex(victim);
-        int aggressorIndex = getPieceIndex(aggressor);
+        if (victim == Piece.NONE) {
+            // En Passant
+            return 105; // Pawn takes Pawn (100 + 5)
+        }
 
-        return MVV_LVA_SCORES[victimIndex][aggressorIndex];
+        return MVV_LVA_SCORES[getPieceIndex(victim)][getPieceIndex(attacker)];
     }
 
-    /**
-     * Check if move is a capture.
-     */
-    private boolean isCapture(BoardInterface board, Move move) {
-        return board.getPiece(move.getTo()) != Piece.NONE;
-    }
-
-    /**
-     * Check if move is a promotion.
-     */
-    private boolean isPromotion(Move move) {
-        return move.getPromotion() != com.github.bhlangonijr.chesslib.Piece.NONE;
+    private boolean isPromotion(int move) {
+        return Bitboard.getPromo(move) != 0;
     }
 
     /**
      * Rate a move according to the Golden Ordering Strategy.
      * Higher score = search first.
      */
-    public int rateMove(BoardInterface board, Move move, Move hashMove, int ply) {
+    public int rateMove(Bitboard board, int move, int hashMove, int ply) {
         // 1. Hash Move (from TT) - Highest priority
-        if (move.equals(hashMove)) {
-            return 2_000_000;
+        if (move == hashMove) {
+            return 20000000;
         }
 
+        int score = 0;
+        int from = Bitboard.getFrom(move);
+        int to = Bitboard.getTo(move);
+        Piece victim = board.getPieceAt(SQUARES[to]);
+
+        boolean isCapture = (victim != Piece.NONE) ||
+            ( (board.getPieceAt(SQUARES[from]) == Piece.WHITE_PAWN || board.getPieceAt(SQUARES[from]) == Piece.BLACK_PAWN) &&
+              (Math.abs(from - to) % 8 != 0) && victim == Piece.NONE );
+
         // 2. Captures - MVV-LVA scoring
-        if (isCapture(board, move)) {
+        if (isCapture) {
             int mvvLva = getMvvLvaScore(board, move);
 
             // Winning captures (good trades)
             if (mvvLva >= 0) {
-                return 1_000_000 + mvvLva;
+                score = 1000000 + mvvLva;
             } else {
                 // Losing captures (bad trades) - search last
-                return mvvLva; // Negative score
+                score = mvvLva; // Negative score
             }
         }
 
         // 3. Promotions (treat as high-value captures)
         if (isPromotion(move)) {
-            return 950_000;
+            score = Math.max(score, 950000);
         }
 
         // 4. Killer Moves
         if (isKiller(move, ply)) {
-            if (move.equals(killerMoves[ply][0])) {
-                return 900_000;
+            if (move == killerMoves[ply][0]) {
+                score += 900000;
             } else {
-                return 800_000;
+                score += 800000;
             }
         }
 
         // 5. Quiet Moves - History Heuristic
-        int from = move.getFrom().ordinal();
-        int to = move.getTo().ordinal();
-        return historyScores[from][to];
+        if (!isCapture) {
+            score += historyScores[from][to];
+        }
+
+        return score;
     }
 
     /**
      * Pick the best move from the remaining moves and swap it to currentIndex.
      * This is more efficient than sorting the entire list.
      */
-    public void pickBestMove(BoardInterface board, List<Move> moves, int currentIndex, Move hashMove, int ply) {
-        if (currentIndex >= moves.size()) return;
+    public void pickBestMove(Bitboard board, int[] moves, int count, int currentIndex, int hashMove, int ply) {
+        if (currentIndex >= count) return;
 
         int bestScore = Integer.MIN_VALUE;
         int bestIndex = currentIndex;
 
-        for (int i = currentIndex; i < moves.size(); i++) {
-            Move move = moves.get(i);
+        for (int i = currentIndex; i < count; i++) {
+            int move = moves[i];
             int score = rateMove(board, move, hashMove, ply);
 
             if (score > bestScore) {
@@ -214,17 +218,15 @@ public class MoveOrdering {
             }
         }
 
-        // Swap best move to current position
         if (bestIndex != currentIndex) {
-            Collections.swap(moves, currentIndex, bestIndex);
+            int temp = moves[currentIndex];
+            moves[currentIndex] = moves[bestIndex];
+            moves[bestIndex] = temp;
         }
     }
 
-    /**
-     * Get the hash move from the transposition table.
-     */
-    public Move getHashMove(long zobristHash) {
-        if (transpositionTable == null) return null;
+    public int getHashMove(long zobristHash) {
+        if (transpositionTable == null) return 0;
         return transpositionTable.getBestMove(zobristHash);
     }
 }

@@ -63,21 +63,4 @@ class BitboardStructureTest {
         board.loadFromFen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         assertEquals(Square.NONE, board.getEnPassant());
     }
-
-    @Test
-    void testGetBitboard() {
-        Bitboard board = new Bitboard();
-        board.putPiece(Piece.WHITE_PAWN, Square.A2);
-        board.putPiece(Piece.WHITE_PAWN, Square.B2);
-        
-        long whitePawns = board.getBitboard(Piece.WHITE_PAWN);
-        assertTrue((whitePawns & (1L << Square.A2.ordinal())) != 0);
-        assertTrue((whitePawns & (1L << Square.B2.ordinal())) != 0);
-        
-        long whitePieces = board.getBitboard(Side.WHITE);
-        assertTrue((whitePieces & (1L << Square.A2.ordinal())) != 0);
-        assertTrue((whitePieces & (1L << Square.B2.ordinal())) != 0);
-        
-        assertEquals(0, board.getBitboard(Side.BLACK));
-    }
 }

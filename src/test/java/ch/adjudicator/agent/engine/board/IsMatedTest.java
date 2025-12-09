@@ -13,16 +13,8 @@ class IsMatedTest {
 
     @ParameterizedTest
     @MethodSource("provideFens")
-    void testIsMatedChesslib(String fen, boolean expectedMate) {
-        BoardInterface board = new ChesslibBoard();
-        board.loadFromFen(fen);
-        assertEquals(expectedMate, board.isMated(), "Failed for FEN: " + fen);
-    }
-
-    @ParameterizedTest
-    @MethodSource("provideFens")
     void testIsMatedBitboard(String fen, boolean expectedMate) {
-        BoardInterface board = new Bitboard();
+        Bitboard board = new Bitboard();
         board.loadFromFen(fen);
         assertEquals(expectedMate, board.isMated(), "Failed for FEN: " + fen);
     }

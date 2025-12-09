@@ -1,6 +1,8 @@
 package ch.adjudicator.agent.engine;
 
-import ch.adjudicator.agent.engine.board.BoardStatus;
+import ch.adjudicator.agent.engine.board.Bitboard;
+import com.github.bhlangonijr.chesslib.CastleRight;
+import com.github.bhlangonijr.chesslib.Side;
 
 /**
  * PeSTO (Piece Square Tables Only) Evaluation.
@@ -45,15 +47,10 @@ public class Evaluator {
     private static final int EG_BLOCKING_PENALTY = 0;
 
     private static final int MG_KING_OPEN_FILE_PENALTY = -25;
-    private static final int MG_KING_SEMI_OPEN_FILE_PENALTY = -10;
 
     private static final long[] FILE_MASKS = {
             0x0101010101010101L, 0x0202020202020202L, 0x0404040404040404L, 0x0808080808080808L,
             0x1010101010101010L, 0x2020202020202020L, 0x4040404040404040L, 0x8080808080808080L
-    };
-
-    private static final long[] RANK_MASKS = {
-            0xFFL, 0xFF00L, 0xFF0000L, 0xFF000000L, 0xFF00000000L, 0xFF0000000000L, 0xFF000000000000L, 0xFF00000000000000L
     };
 
     // Piece-Square Tables for Middle Game
@@ -221,7 +218,7 @@ public class Evaluator {
      * Evaluate position from white's perspective.
      * Positive score = white is better, negative = black is better.
      */
-    public static int evaluate(BoardStatus board) {
+    public static int evaluate(Bitboard board) {
         // MG score in upper 32 bits, EG score in lower 32 bits
         long whiteScore = 0;
         long blackScore = 0;
@@ -252,19 +249,21 @@ public class Evaluator {
         // Formula: (mg * phase + eg * (256 - phase)) / 256
         int score = (mgScore * phase + egScore * (256 - phase)) / 256;
 
-        return board.isWhiteToMove() ? score : -score;
+        return (board.getSideToMove() == Side.WHITE) ? score : -score;
     }
 
     /**
      * Evaluate castling rights and status.
      */
-    private static long evaluateCastling(BoardStatus board, boolean white) {
+    private static long evaluateCastling(Bitboard board, boolean white) {
         int mgScore = 0;
         int egScore = 0;
 
-        boolean kRight = white ? board.isWhiteCastleKingSide() : board.isBlackCastleKingSide();
-        boolean qRight = white ? board.isWhiteCastleQueenSide() : board.isBlackCastleQueenSide();
-        long king = white ? board.getWhiteKing() : board.getBlackKing();
+        CastleRight cr = board.getCastleRight(white ? Side.WHITE : Side.BLACK);
+        boolean kRight = cr.equals(CastleRight.KING_SIDE) || cr.equals(CastleRight.KING_AND_QUEEN_SIDE);
+        boolean qRight = cr.equals(CastleRight.QUEEN_SIDE) || cr.equals(CastleRight.KING_AND_QUEEN_SIDE);
+        
+        long king = white ? board.whiteKing : board.blackKing;
 
         // Castling rights bonus
         if (kRight) {
@@ -295,12 +294,12 @@ public class Evaluator {
         return pack(mgScore, egScore);
     }
 
-    private static long evaluateKingSafety(BoardStatus board, boolean white) {
+    private static long evaluateKingSafety(Bitboard board, boolean white) {
         int mgScore = 0;
         int egScore = 0; // King safety matters less in endgame
 
-        long kingBitboard = white ? board.getWhiteKing() : board.getBlackKing();
-        long ownPawns = white ? board.getWhitePawns() : board.getBlackPawns();
+        long kingBitboard = white ? board.whiteKing : board.blackKing;
+        long ownPawns = white ? board.whitePawns : board.blackPawns;
 
         int kingSq = Long.numberOfTrailingZeros(kingBitboard);
         if (kingSq < 64) {
@@ -321,12 +320,12 @@ public class Evaluator {
     /**
      * Calculate game phase (256 = opening, 0 = endgame).
      */
-    private static int calculatePhase(BoardStatus board) {
+    private static int calculatePhase(Bitboard board) {
         int phase = 0;
-        phase += Long.bitCount(board.getWhiteKnights() | board.getBlackKnights()) * 1;
-        phase += Long.bitCount(board.getWhiteBishops() | board.getBlackBishops()) * 1;
-        phase += Long.bitCount(board.getWhiteRooks() | board.getBlackRooks()) * 2;
-        phase += Long.bitCount(board.getWhiteQueens() | board.getBlackQueens()) * 4;
+        phase += Long.bitCount(board.whiteKnights | board.blackKnights);
+        phase += Long.bitCount(board.whiteBishops | board.blackBishops);
+        phase += Long.bitCount(board.whiteRooks | board.blackRooks) * 2;
+        phase += Long.bitCount(board.whiteQueens | board.blackQueens) * 4;
 
         // Total material at start: 4 knights + 4 bishops + 4 rooks + 2 queens = 24
         // Scale to 256
@@ -336,14 +335,14 @@ public class Evaluator {
     /**
      * Evaluate all pieces of one color.
      */
-    private static long evaluatePieces(BoardStatus board, boolean white) {
+    private static long evaluatePieces(Bitboard board, boolean white) {
         long totalScore = 0;
 
-        long pawns = white ? board.getWhitePawns() : board.getBlackPawns();
-        long knights = white ? board.getWhiteKnights() : board.getBlackKnights();
-        long bishops = white ? board.getWhiteBishops() : board.getBlackBishops();
-        long rooks = white ? board.getWhiteRooks() : board.getBlackRooks();
-        long queens = white ? board.getWhiteQueens() : board.getBlackQueens();
+        long pawns = white ? board.whitePawns : board.blackPawns;
+        long knights = white ? board.whiteKnights : board.blackKnights;
+        long bishops = white ? board.whiteBishops : board.blackBishops;
+        long rooks = white ? board.whiteRooks : board.blackRooks;
+        long queens = white ? board.whiteQueens : board.blackQueens;
 
         totalScore = add(totalScore, evaluatePieceType(pawns, PAWN_VALUE, white, MG_PAWN_TABLE, EG_PAWN_TABLE));
         totalScore = add(totalScore, evaluatePieceType(knights, KNIGHT_VALUE, white, MG_KNIGHT_TABLE, EG_KNIGHT_TABLE));
@@ -352,7 +351,7 @@ public class Evaluator {
         totalScore = add(totalScore, evaluatePieceType(queens, QUEEN_VALUE, white, MG_QUEEN_TABLE, EG_QUEEN_TABLE));
 
         // King position evaluation
-        long king = white ? board.getWhiteKing() : board.getBlackKing();
+        long king = white ? board.whiteKing : board.blackKing;
         if (king != 0) {
             int square = Long.numberOfTrailingZeros(king);
             int tableSquare = white ? (square ^ 56) : square; // Flip for white
@@ -386,13 +385,13 @@ public class Evaluator {
         return Long.bitCount(bitboard);
     }
 
-    private static long evaluateBlocking(BoardStatus board, boolean white) {
+    private static long evaluateBlocking(Bitboard board, boolean white) {
         int mgScore = 0;
         int egScore = 0;
 
-        long king = white ? board.getWhiteKing() : board.getBlackKing();
-        long pieces = white ? (board.getWhitePawns() | board.getWhiteKnights() | board.getWhiteBishops() | board.getWhiteRooks() | board.getWhiteQueens())
-                : (board.getBlackPawns() | board.getBlackKnights() | board.getBlackBishops() | board.getBlackRooks() | board.getBlackQueens());
+        long king = white ? board.whiteKing : board.blackKing;
+        long pieces = white ? (board.whitePawns | board.whiteKnights | board.whiteBishops | board.whiteRooks | board.whiteQueens)
+                : (board.blackPawns | board.blackKnights | board.blackBishops | board.blackRooks | board.blackQueens);
 
         // King Blocking Penalty
         if (white) {
@@ -401,7 +400,6 @@ public class Evaluator {
                 // Check if own pieces are on d1 (3) or f1 (5)
                 if ((pieces & (1L << 3)) != 0 || (pieces & (1L << 5)) != 0) {
                     mgScore -= MG_BLOCKING_PENALTY;
-                    egScore -= EG_BLOCKING_PENALTY;
                 }
             }
         } else {
@@ -410,22 +408,21 @@ public class Evaluator {
                 // Check if own pieces are on d8 (59) or f8 (61)
                 if ((pieces & (1L << 59)) != 0 || (pieces & (1L << 61)) != 0) {
                     mgScore -= MG_BLOCKING_PENALTY;
-                    egScore -= EG_BLOCKING_PENALTY;
                 }
             }
         }
         return pack(mgScore, egScore);
     }
 
-    private static long evaluateMobility(BoardStatus board, boolean white) {
+    private static long evaluateMobility(Bitboard board, boolean white) {
         int mgScore = 0;
         int egScore = 0;
 
-        long ownPieces = white ? (board.getWhitePawns() | board.getWhiteKnights() | board.getWhiteBishops() | board.getWhiteRooks() | board.getWhiteQueens() | board.getWhiteKing())
-                : (board.getBlackPawns() | board.getBlackKnights() | board.getBlackBishops() | board.getBlackRooks() | board.getBlackQueens() | board.getBlackKing());
+        long ownPieces = white ? (board.whitePawns | board.whiteKnights | board.whiteBishops | board.whiteRooks | board.whiteQueens | board.whiteKing)
+                : (board.blackPawns | board.blackKnights | board.blackBishops | board.blackRooks | board.blackQueens | board.blackKing);
 
         // Knights
-        long knights = white ? board.getWhiteKnights() : board.getBlackKnights();
+        long knights = white ? board.whiteKnights : board.blackKnights;
         while (knights != 0) {
             int sq = Long.numberOfTrailingZeros(knights);
             long attacks = KNIGHT_MOVES[sq] & ~ownPieces;
@@ -438,7 +435,7 @@ public class Evaluator {
         }
 
         // Bishops/Rooks Centrality
-        long rooks = white ? board.getWhiteRooks() : board.getBlackRooks();
+        long rooks = white ? board.whiteRooks : board.blackRooks;
         while (rooks != 0) {
             int sq = Long.numberOfTrailingZeros(rooks);
             int rank = sq / 8;
@@ -455,7 +452,7 @@ public class Evaluator {
             rooks &= rooks - 1;
         }
 
-        long bishops = white ? board.getWhiteBishops() : board.getBlackBishops();
+        long bishops = white ? board.whiteBishops : board.blackBishops;
         while (bishops != 0) {
             int sq = Long.numberOfTrailingZeros(bishops);
             int r = sq / 8;
@@ -477,12 +474,12 @@ public class Evaluator {
         return pack(mgScore, egScore);
     }
 
-    private static long evaluatePawnStructure(BoardStatus board, boolean white) {
+    private static long evaluatePawnStructure(Bitboard board, boolean white) {
         int mgScore = 0;
         int egScore = 0;
 
-        long myPawns = white ? board.getWhitePawns() : board.getBlackPawns();
-        long enemyPawns = white ? board.getBlackPawns() : board.getWhitePawns();
+        long myPawns = white ? board.whitePawns : board.blackPawns;
+        long enemyPawns = white ? board.blackPawns : board.whitePawns;
 
         // Pawn Structure
         for (int file = 0; file < 8; file++) {
