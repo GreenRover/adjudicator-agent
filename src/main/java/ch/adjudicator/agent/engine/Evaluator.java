@@ -613,6 +613,55 @@ public class Evaluator {
             tempPawns &= tempPawns - 1;
         }
 
+        // Enemy Passed Pawns (Danger Calculation)
+        long tempEnemy = enemyPawns;
+        while (tempEnemy != 0) {
+            int sq = Long.numberOfTrailingZeros(tempEnemy);
+            int rank = sq / 8;
+            int file = sq % 8;
+
+            long frontSpan = 0L;
+            // Check if passed relative to ME (myPawns blocking?)
+            // If I am White, Enemy is Black (moving down). Front is rank-1..0
+            if (white) {
+                // Enemy is Black
+                for (int r = rank - 1; r >= 0; r--) {
+                    frontSpan |= (1L << (r * 8 + file));
+                    if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
+                    if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
+                }
+            } else {
+                // Enemy is White
+                for (int r = rank + 1; r < 8; r++) {
+                    frontSpan |= (1L << (r * 8 + file));
+                    if (file > 0) frontSpan |= (1L << (r * 8 + file - 1));
+                    if (file < 7) frontSpan |= (1L << (r * 8 + file + 1));
+                }
+            }
+
+            if ((frontSpan & myPawns) == 0) {
+                // It is an enemy passed pawn
+                // Calculate relative rank for the enemy
+                // If I am White, Enemy is Black. Rank 1 is promotion-1 (Relative Rank 6).
+                // Relative Rank = (EnemyColor == White) ? rank : (7 - rank)
+                // EnemyColor is !white
+                int relativeRank = (!white) ? rank : (7 - rank);
+
+                int penalty = 0;
+                switch (relativeRank) {
+                    case 6 -> penalty = -200; // Rank 7 (about to promote)
+                    case 5 -> penalty = -50;  // Rank 6
+                    case 4 -> penalty = -20;  // Rank 5
+                    case 3 -> penalty = -10;  // Rank 4
+                }
+
+                mgScore += penalty;
+                egScore += penalty;
+            }
+
+            tempEnemy &= tempEnemy - 1;
+        }
+
         return pack(mgScore, egScore);
     }
 

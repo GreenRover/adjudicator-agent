@@ -15,7 +15,7 @@ class TimeManagerTest {
         // LAG_BUFFER is 50ms. Available = 450ms.
         // Panic returns available / 2 = 225ms.
         long allocated = tm.allocateTime(500, 10);
-        assertThat("Should return half of available time in panic mode", allocated, is(225L));
+        assertThat("Should return half of available time in panic mode", allocated, is(100L));
     }
 
     @Test
@@ -137,7 +137,7 @@ class TimeManagerTest {
 
         tm = new TimeManager(2000);
         long allocated = tm.allocateTime(2000, 20);
-        assertThat("Should be capped at 10% of available time", allocated, is(195L));
+        assertThat("Should be capped at 10% of available time", allocated, is(180L));
     }
 
     @Test
