@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 
+@SuppressWarnings("DuplicatedCode")
 public class Bitboard {
 
     private static final Square[] SQUARES = Square.values();
@@ -355,6 +356,7 @@ public class Bitboard {
 
     // --- Move Execution ---
 
+    @SuppressWarnings("ExtractMethodRecommender")
     public void makeMove(int move) {
         StateHistory state = history[historyPly];
         state.move = move;
@@ -425,25 +427,22 @@ public class Bitboard {
 
         // 4. Handle Castling (Rook)
         if ((movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
+            int rFrom;
+            int rTo;
+            Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
             if (to > from) { // Kingside
-                int rFrom = from + 3;
-                int rTo = from + 1;
-                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
-                removePieceInternal(rook, rFrom);
-                putPieceInternal(rook, rTo);
+                rFrom = from + 3;
+                rTo = from + 1;
                 // ZOBRIST: Update Rook
-                xorPiece(rook, rFrom);
-                xorPiece(rook, rTo);
             } else { // Queenside
-                int rFrom = from - 4;
-                int rTo = from - 1;
-                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
-                removePieceInternal(rook, rFrom);
-                putPieceInternal(rook, rTo);
+                rFrom = from - 4;
+                rTo = from - 1;
                 // ZOBRIST: Update Rook
-                xorPiece(rook, rFrom);
-                xorPiece(rook, rTo);
             }
+            removePieceInternal(rook, rFrom);
+            putPieceInternal(rook, rTo);
+            xorPiece(rook, rFrom);
+            xorPiece(rook, rTo);
         }
 
         // ZOBRIST: Update Castling Rights (Remove old)
@@ -554,7 +553,7 @@ public class Bitboard {
         mailbox[sqIdx] = Piece.NONE;
     }
 
-    public boolean doMove(Move move) {
+    public void doMove(Move move) {
         int from = move.getFrom().ordinal();
         int to = move.getTo().ordinal();
         int promo = 0;
@@ -567,41 +566,13 @@ public class Bitboard {
         }
         int encoded = encodeMove(from, to, promo);
         makeMove(encoded);
-        return true;
     }
 
-    public Move undoMove() {
+    public void undoMove() {
         if (historyPly > 0) {
             int move = history[historyPly - 1].move;
-            int from = move & 0x3F;
-            int to = (move >> 6) & 0x3F;
-            int promo = (move >> 12) & 7;
-            Piece promoPiece = Piece.NONE;
-
-            // Note: sideToMove is the side AFTER the move.
-            Side mover = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
-
-            if (promo != 0) {
-                if (mover == Side.WHITE) {
-                    switch (promo) {
-                        case 1 -> promoPiece = Piece.WHITE_KNIGHT;
-                        case 2 -> promoPiece = Piece.WHITE_BISHOP;
-                        case 3 -> promoPiece = Piece.WHITE_ROOK;
-                        case 4 -> promoPiece = Piece.WHITE_QUEEN;
-                    }
-                } else {
-                    switch (promo) {
-                        case 1 -> promoPiece = Piece.BLACK_KNIGHT;
-                        case 2 -> promoPiece = Piece.BLACK_BISHOP;
-                        case 3 -> promoPiece = Piece.BLACK_ROOK;
-                        case 4 -> promoPiece = Piece.BLACK_QUEEN;
-                    }
-                }
-            }
             unmakeMove(move);
-            return new Move(SQUARES[from], SQUARES[to], promoPiece);
         }
-        return null;
     }
 
     public void unmakeMove(int move) {
@@ -630,12 +601,9 @@ public class Bitboard {
         putPieceInternal(movedPiece, from);
 
         if (capturedPiece != Piece.NONE) {
-            boolean isEP = false;
-            if ((movedPiece == Piece.WHITE_PAWN || movedPiece == Piece.BLACK_PAWN) &&
+            boolean isEP = (movedPiece == Piece.WHITE_PAWN || movedPiece == Piece.BLACK_PAWN) &&
                     state.enPassantSquare != Square.NONE &&
-                    to == state.enPassantSquare.ordinal()) {
-                isEP = true;
-            }
+                    to == state.enPassantSquare.ordinal();
 
             if (isEP) {
                 int capSq = (sideToMove == Side.WHITE) ? to - 8 : to + 8;
@@ -646,19 +614,18 @@ public class Bitboard {
         }
 
         if ((movedPiece == Piece.WHITE_KING || movedPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
+            int rFrom;
+            int rTo;
+            Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
             if (to > from) {
-                int rFrom = from + 3;
-                int rTo = from + 1;
-                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
-                removePieceInternal(rook, rTo);
-                putPieceInternal(rook, rFrom);
+                rFrom = from + 3;
+                rTo = from + 1;
             } else {
-                int rFrom = from - 4;
-                int rTo = from - 1;
-                Piece rook = (sideToMove == Side.WHITE) ? Piece.WHITE_ROOK : Piece.BLACK_ROOK;
-                removePieceInternal(rook, rTo);
-                putPieceInternal(rook, rFrom);
+                rFrom = from - 4;
+                rTo = from - 1;
             }
+            removePieceInternal(rook, rTo);
+            putPieceInternal(rook, rFrom);
         }
     }
 
@@ -779,7 +746,7 @@ public class Bitboard {
 
             long rooksQueens = (whiteRooks | whiteQueens) & ignoreMask;
             if (rooksQueens != 0) {
-                if ((AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
+                return (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0;
             }
         } else {
             if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & blackPawns & ignoreMask) != 0) return true;
@@ -793,13 +760,13 @@ public class Bitboard {
 
             long rooksQueens = (blackRooks | blackQueens) & ignoreMask;
             if (rooksQueens != 0) {
-                if ((AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
+                return (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0;
             }
         }
         return false;
     }
 
-    public boolean doNullMove() {
+    public void doNullMove() {
         StateHistory state = history[historyPly];
         state.move = 0;
         state.capturedPiece = Piece.NONE;
@@ -825,8 +792,6 @@ public class Bitboard {
 
         // ZOBRIST: Flip side
         zobristHash ^= Zobrist.blackToMoveKey();
-
-        return true;
     }
 
     public boolean isMated() {
@@ -836,6 +801,7 @@ public class Bitboard {
         return count == 0;
     }
 
+    @SuppressWarnings("RedundantIfStatement")
     public boolean isSquareAttacked(int sq, Side attackerSide) {
         long occ = occupiedSquares;
         if (attackerSide == Side.WHITE) {
@@ -869,21 +835,19 @@ public class Bitboard {
     }
 
     public CastleRight getCastleRight(Side side) {
+        boolean k;
+        boolean q;
         if (side == Side.WHITE) {
-            boolean k = (castlingRights & CASTLE_WK) != 0;
-            boolean q = (castlingRights & CASTLE_WQ) != 0;
-            if (k && q) return CastleRight.KING_AND_QUEEN_SIDE;
-            if (k) return CastleRight.KING_SIDE;
-            if (q) return CastleRight.QUEEN_SIDE;
-            return CastleRight.NONE;
+            k = (castlingRights & CASTLE_WK) != 0;
+            q = (castlingRights & CASTLE_WQ) != 0;
         } else {
-            boolean k = (castlingRights & CASTLE_BK) != 0;
-            boolean q = (castlingRights & CASTLE_BQ) != 0;
-            if (k && q) return CastleRight.KING_AND_QUEEN_SIDE;
-            if (k) return CastleRight.KING_SIDE;
-            if (q) return CastleRight.QUEEN_SIDE;
-            return CastleRight.NONE;
+            k = (castlingRights & CASTLE_BK) != 0;
+            q = (castlingRights & CASTLE_BQ) != 0;
         }
+        if (k && q) return CastleRight.KING_AND_QUEEN_SIDE;
+        if (k) return CastleRight.KING_SIDE;
+        if (q) return CastleRight.QUEEN_SIDE;
+        return CastleRight.NONE;
     }
 
     public long getBitboard(Side side) {
