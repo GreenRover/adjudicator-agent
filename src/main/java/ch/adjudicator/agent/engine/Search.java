@@ -299,8 +299,10 @@ public class Search {
             }
         }
 
+        boolean inCheck = board.isKingAttacked();
+
         // Null Move Pruning
-        if (enableNmp && depth >= 3 && !board.isKingAttacked()) {
+        if (enableNmp && depth >= 3 && !inCheck) {
             Side side = board.getSideToMove();
             // Check for non-pawn/non-king material to avoid zugzwang
             long pieces = board.getBitboard(side);
@@ -324,7 +326,7 @@ public class Search {
 
         // Depth 0: switch to quiescence search
         if (depth <= 0) {
-            return quiescence(alpha, beta, ply);
+            return quiescence(alpha, beta, ply, 0);
         }
 
         int[] moves = moveBuffer[ply];
@@ -332,7 +334,7 @@ public class Search {
 
         // Terminal node (checkmate or stalemate)
         if (count == 0) {
-            if (board.isMated()) {
+            if (inCheck) {
                 return -MATE_SCORE + (MAX_DEPTH - depth); // Prefer faster mates
             }
             return 0; // Stalemate
@@ -344,8 +346,6 @@ public class Search {
         int bestScore = -INFINITY;
         int bestMove = 0;
         int originalAlpha = alpha;
-
-        boolean inCheck = board.isKingAttacked();
 
         // Use pickBestMove for advanced move ordering
         for (int i = 0; i < count; i++) {
@@ -361,17 +361,23 @@ public class Search {
 
             int score;
 
+            int extension = 0;
+            if (inCheck && ply < MAX_DEPTH * 2) {
+                extension = 1;
+            }
+            int nextDepth = depth - 1 + extension;
+
             if (i == 0) {
                 // First move: Full Window Search
-                score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
+                score = -alphaBeta(-beta, -alpha, nextDepth, ply + 1);
             } else {
                 // Late moves: Null Window Search (PVS)
                 
-                int searchDepth = depth - 1;
+                int searchDepth = nextDepth;
 
                 // Check if LMR is applicable
                 if (i >= 4 && depth >= 3 && !isCapture(move) && !isPromotion(move) && !inCheck) {
-                    searchDepth = depth - 2;
+                    searchDepth -= 1;
                 }
 
                 // Search with Null Window (alpha, alpha+1)
@@ -379,7 +385,7 @@ public class Search {
 
                 // Re-Search
                 if (score > alpha && score < beta) {
-                    score = -alphaBeta(-beta, -alpha, depth - 1, ply + 1);
+                    score = -alphaBeta(-beta, -alpha, nextDepth, ply + 1);
                 }
             }
 
@@ -429,7 +435,7 @@ public class Search {
      * Quiescence search: only search captures and checks until position is quiet.
      * Prevents horizon effect.
      */
-    private int quiescence(int alpha, int beta, int ply) {
+    private int quiescence(int alpha, int beta, int ply, int qsDepth) {
         // 1. Check time every 2048 nodes
         if ((nodesSearched & 2047) == 0) {
             if (System.currentTimeMillis() >= stopTime) {
@@ -462,13 +468,25 @@ public class Search {
         
         for (int i = 0; i < count; i++) {
             int move = moves[i];
-             // Only consider captures and promotions
-            if (!isCapture(move) && !isPromotion(move)) {
-                continue;
+            
+            boolean isCap = isCapture(move);
+            boolean isProm = isPromotion(move);
+            
+            if (!isCap && !isProm) {
+                if (qsDepth < 2) {
+                    board.makeMove(move);
+                    boolean givesCheck = board.isKingAttacked();
+                    board.unmakeMove(move);
+                    if (!givesCheck) {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
             }
 
             // Delta Pruning
-            if (!isPromotion(move) && isCapture(move)) {
+            if (!isProm && isCap) {
                 Piece captured = board.getPieceAt(SQUARES[Bitboard.getTo(move)]);
                 int capturedValue = getPieceValue(captured);
                 if (standPat + capturedValue + 200 < alpha) {
@@ -477,7 +495,7 @@ public class Search {
             }
             
             // SEE Pruning for bad captures
-            if (isCapture(move) && !isPromotion(move)) {
+            if (isCap && !isProm) {
                 int seeScore = StaticExchangeEvaluator.see(board, move);
                 if (seeScore < 0) {
                     continue;
@@ -485,7 +503,7 @@ public class Search {
             }
             
             board.makeMove(move);
-            int score = -quiescence(-beta, -alpha, ply + 1);
+            int score = -quiescence(-beta, -alpha, ply + 1, qsDepth + 1);
             board.unmakeMove(move);
             
             if (stopped) break;

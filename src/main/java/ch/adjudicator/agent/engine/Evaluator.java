@@ -1,6 +1,7 @@
 package ch.adjudicator.agent.engine;
 
 import ch.adjudicator.agent.engine.board.Bitboard;
+import ch.adjudicator.agent.engine.board.AttackLookups;
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Side;
 
@@ -20,8 +21,15 @@ public class Evaluator {
     private static final int MG_CASTLING_RIGHT_BONUS = 45;
     private static final int EG_CASTLING_RIGHT_BONUS = 0;
 
-    private static final int MG_HAS_CASTLED_BONUS = 50;
+    private static final int MG_HAS_CASTLED_BONUS = 100;
     private static final int EG_HAS_CASTLED_BONUS = 0;
+
+    // King Safety
+    private static final int MG_PAWN_SHIELD_BONUS = 10;
+    private static final int MG_MISSING_PAWN_SHIELD_PENALTY = -20;
+    private static final int MG_KING_CENTER_PENALTY = -50;
+    // Attacker count: 0, 1, 2, 3, 4+
+    private static final int[] MG_ATTACKER_PENALTY = {0, 0, -25, -75, -150};
 
     // Pawn Structure
     private static final int MG_ISOLATED_PAWN_PENALTY = -10;
@@ -304,13 +312,84 @@ public class Evaluator {
         int kingSq = Long.numberOfTrailingZeros(kingBitboard);
         if (kingSq < 64) {
             int file = kingSq % 8; // 0-7
+            int rank = kingSq / 8; // 0-7
 
-            // Define file masks (you can reuse the ones in Evaluator.java)
-            long fileMask = FILE_MASKS[file];
+            // 1. Pawn Shield (Back rank only)
+            boolean isBackRank = white ? (rank == 0) : (rank == 7);
+            if (isBackRank) {
+                if (file <= 2 || file >= 5) { // Files A-C or F-H
+                    // Check pawns in front (Rank 2 for white, Rank 7 for black)
+                    // We check 3 files: file-1, file, file+1
+                    for (int f = Math.max(0, file - 1); f <= Math.min(7, file + 1); f++) {
+                        int shieldSq = white ? (8 + f) : (48 + f);
+                        if ((ownPawns & (1L << shieldSq)) != 0) {
+                            mgScore += MG_PAWN_SHIELD_BONUS;
+                        } else {
+                            mgScore += MG_MISSING_PAWN_SHIELD_PENALTY;
+                        }
+                    }
+                }
+            }
 
-            // Check if we have pawns on the king's file
-            if ((ownPawns & fileMask) == 0) {
-                mgScore += MG_KING_OPEN_FILE_PENALTY;
+            // 2. Center King Penalty (Middlegame)
+            // Files D(3) or E(4)
+            if (file == 3 || file == 4) {
+                mgScore += MG_KING_CENTER_PENALTY;
+            }
+
+            // 3. Attacker Count
+            // Get squares adjacent to king (King Zone)
+            long kingZone = AttackLookups.KING_ATTACKS[kingSq];
+
+            // Iterate enemy pieces to count attackers
+            int attackerCount = 0;
+            // Enemy pieces
+            long enemyKnights = white ? board.blackKnights : board.whiteKnights;
+            long enemyBishops = white ? board.blackBishops : board.whiteBishops;
+            long enemyRooks = white ? board.blackRooks : board.whiteRooks;
+            long enemyQueens = white ? board.blackQueens : board.whiteQueens;
+            long enemyPawns = white ? board.blackPawns : board.whitePawns;
+
+            long occupied = board.occupiedSquares;
+
+            // Knights
+            long knights = enemyKnights;
+            while (knights != 0) {
+                int sq = Long.numberOfTrailingZeros(knights);
+                if ((AttackLookups.KNIGHT_ATTACKS[sq] & kingZone) != 0) attackerCount++;
+                knights &= knights - 1;
+            }
+
+            // Bishops + Queens (Sliding)
+            long bq = enemyBishops | enemyQueens;
+            while (bq != 0) {
+                int sq = Long.numberOfTrailingZeros(bq);
+                if ((AttackLookups.getBishopAttacks(sq, occupied) & kingZone) != 0) attackerCount++;
+                bq &= bq - 1;
+            }
+
+            // Rooks + Queens (Sliding)
+            long rq = enemyRooks | enemyQueens;
+            while (rq != 0) {
+                int sq = Long.numberOfTrailingZeros(rq);
+                if ((AttackLookups.getRookAttacks(sq, occupied) & kingZone) != 0) attackerCount++;
+                rq &= rq - 1;
+            }
+
+            // Pawns
+            // Enemy pawns attack capture squares.
+            // If I am White, enemy is Black. Black pawns attack "South".
+            int enemySideOrd = white ? 1 : 0; // 0=White, 1=Black
+            long pawns = enemyPawns;
+            while (pawns != 0) {
+                int sq = Long.numberOfTrailingZeros(pawns);
+                if ((AttackLookups.PAWN_ATTACKS[enemySideOrd][sq] & kingZone) != 0) attackerCount++;
+                pawns &= pawns - 1;
+            }
+
+            if (attackerCount > 0) {
+                int penaltyIndex = Math.min(attackerCount, MG_ATTACKER_PENALTY.length - 1);
+                mgScore += MG_ATTACKER_PENALTY[penaltyIndex];
             }
         }
 

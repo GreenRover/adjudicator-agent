@@ -5,7 +5,7 @@ package ch.adjudicator.agent.engine;
  * Allocates thinking time dynamically based on game situation.
  */
 public class TimeManager {
-    private static final long LAG_BUFFER_MS = 50;
+    private static final long LAG_BUFFER_MS = 200;
     private static final long MIN_TIME_MS = 100;
     private static final long MAX_TIME_MS = 10000;
     private static final long PANIC_THRESHOLD_MS = 1000;
@@ -26,6 +26,11 @@ public class TimeManager {
      * @return Allocated time in milliseconds
      */
     public long allocateTime(long timeRemainingMs, int moveNumber) {
+        // If time is very low, return a safe conservative value
+        if (timeRemainingMs < 2000) {
+            return 100;
+        }
+
         this.moveNumber = moveNumber;
 
         // Safety buffer: subtract lag

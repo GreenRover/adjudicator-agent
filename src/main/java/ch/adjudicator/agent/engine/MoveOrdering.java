@@ -195,6 +195,16 @@ public class MoveOrdering {
             score += historyScores[from][to];
         }
 
+        // 6. Checking Moves (bonus to find tactics)
+        // Only check if score is not already high (Winning Capture or Hash)
+        if (score < 960000) {
+            board.makeMove(move);
+            if (board.isKingAttacked()) {
+                score = 960000;
+            }
+            board.unmakeMove(move);
+        }
+
         return score;
     }
 
