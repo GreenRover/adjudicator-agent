@@ -93,7 +93,7 @@ public class StaticExchangeEvaluator {
         valCaptured = valAttacker; // The attacker becomes the victim for the next capture
 
         long fromSet = 1L << from;
-        long occupied = board.occupiedSquares;
+        long occupied = board.getOccupiedSquares();
         
         // Make the first move
         occupied ^= fromSet; // Remove attacker from origin
@@ -126,8 +126,7 @@ public class StaticExchangeEvaluator {
             occupied ^= lvaBit;
 
             // Add X-ray attacks (sliders behind the mover)
-            if ((lvaBit & (board.whiteRooks | board.whiteQueens | board.whiteBishops |
-                    board.blackRooks | board.blackQueens | board.blackBishops)) != 0) {
+            if (attackerType == PieceType.ROOK || attackerType == PieceType.BISHOP || attackerType == PieceType.QUEEN) {
                 // Handled implicitly by next getLeastValuableAttacker call
             }
 
@@ -146,7 +145,7 @@ public class StaticExchangeEvaluator {
         // Order: Pawn, Knight, Bishop, Rook, Queen, King
         
         // Pawns
-        long pawns = (side == Side.WHITE) ? bs.whitePawns : bs.blackPawns;
+        long pawns = (side == Side.WHITE) ? bs.getBitboard(Piece.WHITE_PAWN) : bs.getBitboard(Piece.BLACK_PAWN);
         int sideIdx = (side == Side.WHITE) ? 0 : 1;
         long pawnAttacks = PAWN_ATTACKS[1 - sideIdx][sq];
         long matchingPawns = pawnAttacks & pawns & occupied;
@@ -155,15 +154,15 @@ public class StaticExchangeEvaluator {
         }
 
         // Knights
-        long knights = (side == Side.WHITE) ? bs.whiteKnights : bs.blackKnights;
+        long knights = (side == Side.WHITE) ? bs.getBitboard(Piece.WHITE_KNIGHT) : bs.getBitboard(Piece.BLACK_KNIGHT);
         long knightAttacks = KNIGHT_ATTACKS[sq] & knights & occupied;
         if (knightAttacks != 0) {
             return Long.lowestOneBit(knightAttacks);
         }
 
         // Bishops
-        long bishops = (side == Side.WHITE) ? bs.whiteBishops : bs.blackBishops;
-        long queens = (side == Side.WHITE) ? bs.whiteQueens : bs.blackQueens;
+        long bishops = (side == Side.WHITE) ? bs.getBitboard(Piece.WHITE_BISHOP) : bs.getBitboard(Piece.BLACK_BISHOP);
+        long queens = (side == Side.WHITE) ? bs.getBitboard(Piece.WHITE_QUEEN) : bs.getBitboard(Piece.BLACK_QUEEN);
         long bishopQueens = bishops | queens;
         if (bishopQueens != 0) {
             long attacks = getBishopAttacks(sq, occupied) & bishopQueens & occupied;
@@ -171,7 +170,7 @@ public class StaticExchangeEvaluator {
         }
 
         // Rooks
-        long rooks = (side == Side.WHITE) ? bs.whiteRooks : bs.blackRooks;
+        long rooks = (side == Side.WHITE) ? bs.getBitboard(Piece.WHITE_ROOK) : bs.getBitboard(Piece.BLACK_ROOK);
         long rookQueens = rooks | queens;
         if (rookQueens != 0) {
             long attacks = getRookAttacks(sq, occupied) & rookQueens & occupied;
@@ -179,7 +178,7 @@ public class StaticExchangeEvaluator {
         }
 
         // King
-        long king = (side == Side.WHITE) ? bs.whiteKing : bs.blackKing;
+        long king = (side == Side.WHITE) ? bs.getBitboard(Piece.WHITE_KING) : bs.getBitboard(Piece.BLACK_KING);
         long kingAttacks = KING_ATTACKS[sq] & king & occupied;
         if (kingAttacks != 0) {
             return Long.lowestOneBit(kingAttacks);
@@ -281,19 +280,19 @@ public class StaticExchangeEvaluator {
     private static PieceType getPieceTypeAt(Bitboard bs, int sq, Side side) {
         long bit = 1L << sq;
         if (side == Side.WHITE) {
-            if ((bs.whitePawns & bit) != 0) return PieceType.PAWN;
-            if ((bs.whiteKnights & bit) != 0) return PieceType.KNIGHT;
-            if ((bs.whiteBishops & bit) != 0) return PieceType.BISHOP;
-            if ((bs.whiteRooks & bit) != 0) return PieceType.ROOK;
-            if ((bs.whiteQueens & bit) != 0) return PieceType.QUEEN;
-            if ((bs.whiteKing & bit) != 0) return PieceType.KING;
+            if ((bs.getBitboard(Piece.WHITE_PAWN) & bit) != 0) return PieceType.PAWN;
+            if ((bs.getBitboard(Piece.WHITE_KNIGHT) & bit) != 0) return PieceType.KNIGHT;
+            if ((bs.getBitboard(Piece.WHITE_BISHOP) & bit) != 0) return PieceType.BISHOP;
+            if ((bs.getBitboard(Piece.WHITE_ROOK) & bit) != 0) return PieceType.ROOK;
+            if ((bs.getBitboard(Piece.WHITE_QUEEN) & bit) != 0) return PieceType.QUEEN;
+            if ((bs.getBitboard(Piece.WHITE_KING) & bit) != 0) return PieceType.KING;
         } else {
-            if ((bs.blackPawns & bit) != 0) return PieceType.PAWN;
-            if ((bs.blackKnights & bit) != 0) return PieceType.KNIGHT;
-            if ((bs.blackBishops & bit) != 0) return PieceType.BISHOP;
-            if ((bs.blackRooks & bit) != 0) return PieceType.ROOK;
-            if ((bs.blackQueens & bit) != 0) return PieceType.QUEEN;
-            if ((bs.blackKing & bit) != 0) return PieceType.KING;
+            if ((bs.getBitboard(Piece.BLACK_PAWN) & bit) != 0) return PieceType.PAWN;
+            if ((bs.getBitboard(Piece.BLACK_KNIGHT) & bit) != 0) return PieceType.KNIGHT;
+            if ((bs.getBitboard(Piece.BLACK_BISHOP) & bit) != 0) return PieceType.BISHOP;
+            if ((bs.getBitboard(Piece.BLACK_ROOK) & bit) != 0) return PieceType.ROOK;
+            if ((bs.getBitboard(Piece.BLACK_QUEEN) & bit) != 0) return PieceType.QUEEN;
+            if ((bs.getBitboard(Piece.BLACK_KING) & bit) != 0) return PieceType.KING;
         }
         return PieceType.NONE;
     }

@@ -2,7 +2,7 @@ package ch.adjudicator.agent.engine.board;
 
 import ch.adjudicator.agent.engine.Zobrist;
 import ch.adjudicator.agent.engine.ZobristHasher;
-import ch.adjudicator.agent.engine.Evaluator;
+import ch.adjudicator.agent.engine.eval.EvaluationConstants;
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Piece;
 import com.github.bhlangonijr.chesslib.Side;
@@ -16,16 +16,16 @@ import java.util.List;
 @SuppressWarnings("DuplicatedCode")
 public class Bitboard {
 
-    private static final Square[] SQUARES = Square.values();
-    private static final Piece[] PIECES = Piece.values();
-    private static final Side[] PIECE_SIDES = new Side[PIECES.length];
+    static final Square[] SQUARES = Square.values();
+    static final Piece[] PIECES = Piece.values();
+    static final Side[] PIECE_SIDES = new Side[PIECES.length];
     // Map Piece enum to Zobrist piece index (0=Pawn..5=King)
-    private static final int[] ZOBRIST_PIECE_INDICES = new int[PIECES.length];
+    static final int[] ZOBRIST_PIECE_INDICES = new int[PIECES.length];
     
     // Maps for Incremental Evaluation
-    private static final int[] PIECE_VALUES = new int[PIECES.length];
-    private static final int[][] MG_TABLES = new int[PIECES.length][];
-    private static final int[][] EG_TABLES = new int[PIECES.length][];
+    static final int[] PIECE_VALUES = new int[PIECES.length];
+    static final int[][] MG_TABLES = new int[PIECES.length][];
+    static final int[][] EG_TABLES = new int[PIECES.length][];
 
     static {
         for (Piece p : PIECES) {
@@ -48,34 +48,34 @@ public class Bitboard {
                 // Initialize Eval Tables
                 switch (p.getPieceType()) {
                     case PAWN -> {
-                        PIECE_VALUES[p.ordinal()] = Evaluator.PAWN_VALUE;
-                        MG_TABLES[p.ordinal()] = Evaluator.MG_PAWN_TABLE;
-                        EG_TABLES[p.ordinal()] = Evaluator.EG_PAWN_TABLE;
+                        PIECE_VALUES[p.ordinal()] = EvaluationConstants.PAWN_VALUE;
+                        MG_TABLES[p.ordinal()] = EvaluationConstants.MG_PAWN_TABLE;
+                        EG_TABLES[p.ordinal()] = EvaluationConstants.EG_PAWN_TABLE;
                     }
                     case KNIGHT -> {
-                        PIECE_VALUES[p.ordinal()] = Evaluator.KNIGHT_VALUE;
-                        MG_TABLES[p.ordinal()] = Evaluator.MG_KNIGHT_TABLE;
-                        EG_TABLES[p.ordinal()] = Evaluator.EG_KNIGHT_TABLE;
+                        PIECE_VALUES[p.ordinal()] = EvaluationConstants.KNIGHT_VALUE;
+                        MG_TABLES[p.ordinal()] = EvaluationConstants.MG_KNIGHT_TABLE;
+                        EG_TABLES[p.ordinal()] = EvaluationConstants.EG_KNIGHT_TABLE;
                     }
                     case BISHOP -> {
-                        PIECE_VALUES[p.ordinal()] = Evaluator.BISHOP_VALUE;
-                        MG_TABLES[p.ordinal()] = Evaluator.MG_BISHOP_TABLE;
-                        EG_TABLES[p.ordinal()] = Evaluator.EG_BISHOP_TABLE;
+                        PIECE_VALUES[p.ordinal()] = EvaluationConstants.BISHOP_VALUE;
+                        MG_TABLES[p.ordinal()] = EvaluationConstants.MG_BISHOP_TABLE;
+                        EG_TABLES[p.ordinal()] = EvaluationConstants.EG_BISHOP_TABLE;
                     }
                     case ROOK -> {
-                        PIECE_VALUES[p.ordinal()] = Evaluator.ROOK_VALUE;
-                        MG_TABLES[p.ordinal()] = Evaluator.MG_ROOK_TABLE;
-                        EG_TABLES[p.ordinal()] = Evaluator.EG_ROOK_TABLE;
+                        PIECE_VALUES[p.ordinal()] = EvaluationConstants.ROOK_VALUE;
+                        MG_TABLES[p.ordinal()] = EvaluationConstants.MG_ROOK_TABLE;
+                        EG_TABLES[p.ordinal()] = EvaluationConstants.EG_ROOK_TABLE;
                     }
                     case QUEEN -> {
-                        PIECE_VALUES[p.ordinal()] = Evaluator.QUEEN_VALUE;
-                        MG_TABLES[p.ordinal()] = Evaluator.MG_QUEEN_TABLE;
-                        EG_TABLES[p.ordinal()] = Evaluator.EG_QUEEN_TABLE;
+                        PIECE_VALUES[p.ordinal()] = EvaluationConstants.QUEEN_VALUE;
+                        MG_TABLES[p.ordinal()] = EvaluationConstants.MG_QUEEN_TABLE;
+                        EG_TABLES[p.ordinal()] = EvaluationConstants.EG_QUEEN_TABLE;
                     }
                     case KING -> {
                         PIECE_VALUES[p.ordinal()] = 0;
-                        MG_TABLES[p.ordinal()] = Evaluator.MG_KING_TABLE;
-                        EG_TABLES[p.ordinal()] = Evaluator.EG_KING_TABLE;
+                        MG_TABLES[p.ordinal()] = EvaluationConstants.MG_KING_TABLE;
+                        EG_TABLES[p.ordinal()] = EvaluationConstants.EG_KING_TABLE;
                     }
                     default -> {}
                 }
@@ -83,30 +83,30 @@ public class Bitboard {
         }
     }
 
-    private final Piece[] mailbox;
+    final Piece[] mailbox;
 
-    public long whitePieces;
-    public long blackPieces;
-    public long occupiedSquares;
+    long whitePieces;
+    long blackPieces;
+    long occupiedSquares;
 
-    public long whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens, whiteKing;
-    public long blackPawns, blackKnights, blackBishops, blackRooks, blackQueens, blackKing;
+    long whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens, whiteKing;
+    long blackPawns, blackKnights, blackBishops, blackRooks, blackQueens, blackKing;
 
-    private int whiteKingSq = -1;
-    private int blackKingSq = -1;
+    int whiteKingSq = -1;
+    int blackKingSq = -1;
 
-    private Side sideToMove;
-    private int castlingRights;
-    private Square enPassantSquare;
-    private int halfMoveClock;
-    private int fullMoveNumber;
-    private long zobristHash;
-    private int mgPestoScore;
-    private int egPestoScore;
+    Side sideToMove;
+    int castlingRights;
+    Square enPassantSquare;
+    int halfMoveClock;
+    int fullMoveNumber;
+    long zobristHash;
+    int mgPestoScore;
+    int egPestoScore;
 
-    private static final int MAX_GAME_MOVES = 2048;
+    static final int MAX_GAME_MOVES = 2048;
 
-    private static class StateHistory {
+    static class StateHistory {
         public int move;
         public Piece capturedPiece;
         public int castlingRights;
@@ -119,10 +119,10 @@ public class Bitboard {
     private int historyPly = 0;
 
     // Castling constants
-    private static final int CASTLE_WK = 1;
-    private static final int CASTLE_WQ = 2;
-    private static final int CASTLE_BK = 4;
-    private static final int CASTLE_BQ = 8;
+    static final int CASTLE_WK = 1;
+    static final int CASTLE_WQ = 2;
+    static final int CASTLE_BK = 4;
+    static final int CASTLE_BQ = 8;
 
     public Bitboard() {
         for (int i = 0; i < MAX_GAME_MOVES; i++) {
@@ -224,102 +224,40 @@ public class Bitboard {
     }
 
     public void loadFromFen(String fen) {
-        clear();
-        String[] parts = fen.split(" ");
-        String placement = parts[0];
-        String activeColor = parts[1];
-        String castling = parts[2];
-        String enPassant = parts[3];
-
-        int rank = 7;
-        int file = 0;
-        for (char c : placement.toCharArray()) {
-            if (c == '/') {
-                rank--;
-                file = 0;
-            } else if (Character.isDigit(c)) {
-                file += Character.getNumericValue(c);
-            } else {
-                if (file < 8) {
-                    Square sq = SQUARES[rank * 8 + file];
-                    Piece p = getPieceFromChar(c);
-                    putPiece(p, sq);
-                    file++;
-                }
-            }
-        }
-
-        sideToMove = activeColor.equals("w") ? Side.WHITE : Side.BLACK;
-
-        if (!castling.equals("-")) {
-            if (castling.contains("K")) castlingRights |= CASTLE_WK;
-            if (castling.contains("Q")) castlingRights |= CASTLE_WQ;
-            if (castling.contains("k")) castlingRights |= CASTLE_BK;
-            if (castling.contains("q")) castlingRights |= CASTLE_BQ;
-        }
-
-        if (!enPassant.equals("-")) {
-            try {
-                enPassantSquare = Square.valueOf(enPassant.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                enPassantSquare = Square.NONE;
-            }
-        } else {
-            enPassantSquare = Square.NONE;
-        }
-
-        if (parts.length > 4) {
-            try {
-                halfMoveClock = Integer.parseInt(parts[4]);
-            } catch (NumberFormatException e) {
-                halfMoveClock = 0;
-            }
-        }
-
-        if (parts.length > 5) {
-            try {
-                fullMoveNumber = Integer.parseInt(parts[5]);
-            } catch (NumberFormatException e) {
-                fullMoveNumber = 1;
-            }
-        }
-
-        // Full Zobrist calculation for initial position
-        zobristHash = ZobristHasher.getZobristKey(this);
-        initPestoScores();
+        FenParser.load(this, fen);
     }
 
-    private void initPestoScores() {
+    void initPestoScores() {
         mgPestoScore = 0;
         egPestoScore = 0;
 
         // White
-        mgPestoScore += calculateScoreFor(whitePawns, Evaluator.PAWN_VALUE, true, Evaluator.MG_PAWN_TABLE);
-        egPestoScore += calculateScoreFor(whitePawns, Evaluator.PAWN_VALUE, true, Evaluator.EG_PAWN_TABLE);
-        mgPestoScore += calculateScoreFor(whiteKnights, Evaluator.KNIGHT_VALUE, true, Evaluator.MG_KNIGHT_TABLE);
-        egPestoScore += calculateScoreFor(whiteKnights, Evaluator.KNIGHT_VALUE, true, Evaluator.EG_KNIGHT_TABLE);
-        mgPestoScore += calculateScoreFor(whiteBishops, Evaluator.BISHOP_VALUE, true, Evaluator.MG_BISHOP_TABLE);
-        egPestoScore += calculateScoreFor(whiteBishops, Evaluator.BISHOP_VALUE, true, Evaluator.EG_BISHOP_TABLE);
-        mgPestoScore += calculateScoreFor(whiteRooks, Evaluator.ROOK_VALUE, true, Evaluator.MG_ROOK_TABLE);
-        egPestoScore += calculateScoreFor(whiteRooks, Evaluator.ROOK_VALUE, true, Evaluator.EG_ROOK_TABLE);
-        mgPestoScore += calculateScoreFor(whiteQueens, Evaluator.QUEEN_VALUE, true, Evaluator.MG_QUEEN_TABLE);
-        egPestoScore += calculateScoreFor(whiteQueens, Evaluator.QUEEN_VALUE, true, Evaluator.EG_QUEEN_TABLE);
-        mgPestoScore += calculateScoreFor(whiteKing, 0, true, Evaluator.MG_KING_TABLE);
-        egPestoScore += calculateScoreFor(whiteKing, 0, true, Evaluator.EG_KING_TABLE);
+        mgPestoScore += calculateScoreFor(whitePawns, EvaluationConstants.PAWN_VALUE, true, EvaluationConstants.MG_PAWN_TABLE);
+        egPestoScore += calculateScoreFor(whitePawns, EvaluationConstants.PAWN_VALUE, true, EvaluationConstants.EG_PAWN_TABLE);
+        mgPestoScore += calculateScoreFor(whiteKnights, EvaluationConstants.KNIGHT_VALUE, true, EvaluationConstants.MG_KNIGHT_TABLE);
+        egPestoScore += calculateScoreFor(whiteKnights, EvaluationConstants.KNIGHT_VALUE, true, EvaluationConstants.EG_KNIGHT_TABLE);
+        mgPestoScore += calculateScoreFor(whiteBishops, EvaluationConstants.BISHOP_VALUE, true, EvaluationConstants.MG_BISHOP_TABLE);
+        egPestoScore += calculateScoreFor(whiteBishops, EvaluationConstants.BISHOP_VALUE, true, EvaluationConstants.EG_BISHOP_TABLE);
+        mgPestoScore += calculateScoreFor(whiteRooks, EvaluationConstants.ROOK_VALUE, true, EvaluationConstants.MG_ROOK_TABLE);
+        egPestoScore += calculateScoreFor(whiteRooks, EvaluationConstants.ROOK_VALUE, true, EvaluationConstants.EG_ROOK_TABLE);
+        mgPestoScore += calculateScoreFor(whiteQueens, EvaluationConstants.QUEEN_VALUE, true, EvaluationConstants.MG_QUEEN_TABLE);
+        egPestoScore += calculateScoreFor(whiteQueens, EvaluationConstants.QUEEN_VALUE, true, EvaluationConstants.EG_QUEEN_TABLE);
+        mgPestoScore += calculateScoreFor(whiteKing, 0, true, EvaluationConstants.MG_KING_TABLE);
+        egPestoScore += calculateScoreFor(whiteKing, 0, true, EvaluationConstants.EG_KING_TABLE);
 
         // Black
-        mgPestoScore -= calculateScoreFor(blackPawns, Evaluator.PAWN_VALUE, false, Evaluator.MG_PAWN_TABLE);
-        egPestoScore -= calculateScoreFor(blackPawns, Evaluator.PAWN_VALUE, false, Evaluator.EG_PAWN_TABLE);
-        mgPestoScore -= calculateScoreFor(blackKnights, Evaluator.KNIGHT_VALUE, false, Evaluator.MG_KNIGHT_TABLE);
-        egPestoScore -= calculateScoreFor(blackKnights, Evaluator.KNIGHT_VALUE, false, Evaluator.EG_KNIGHT_TABLE);
-        mgPestoScore -= calculateScoreFor(blackBishops, Evaluator.BISHOP_VALUE, false, Evaluator.MG_BISHOP_TABLE);
-        egPestoScore -= calculateScoreFor(blackBishops, Evaluator.BISHOP_VALUE, false, Evaluator.EG_BISHOP_TABLE);
-        mgPestoScore -= calculateScoreFor(blackRooks, Evaluator.ROOK_VALUE, false, Evaluator.MG_ROOK_TABLE);
-        egPestoScore -= calculateScoreFor(blackRooks, Evaluator.ROOK_VALUE, false, Evaluator.EG_ROOK_TABLE);
-        mgPestoScore -= calculateScoreFor(blackQueens, Evaluator.QUEEN_VALUE, false, Evaluator.MG_QUEEN_TABLE);
-        egPestoScore -= calculateScoreFor(blackQueens, Evaluator.QUEEN_VALUE, false, Evaluator.EG_QUEEN_TABLE);
-        mgPestoScore -= calculateScoreFor(blackKing, 0, false, Evaluator.MG_KING_TABLE);
-        egPestoScore -= calculateScoreFor(blackKing, 0, false, Evaluator.EG_KING_TABLE);
+        mgPestoScore -= calculateScoreFor(blackPawns, EvaluationConstants.PAWN_VALUE, false, EvaluationConstants.MG_PAWN_TABLE);
+        egPestoScore -= calculateScoreFor(blackPawns, EvaluationConstants.PAWN_VALUE, false, EvaluationConstants.EG_PAWN_TABLE);
+        mgPestoScore -= calculateScoreFor(blackKnights, EvaluationConstants.KNIGHT_VALUE, false, EvaluationConstants.MG_KNIGHT_TABLE);
+        egPestoScore -= calculateScoreFor(blackKnights, EvaluationConstants.KNIGHT_VALUE, false, EvaluationConstants.EG_KNIGHT_TABLE);
+        mgPestoScore -= calculateScoreFor(blackBishops, EvaluationConstants.BISHOP_VALUE, false, EvaluationConstants.MG_BISHOP_TABLE);
+        egPestoScore -= calculateScoreFor(blackBishops, EvaluationConstants.BISHOP_VALUE, false, EvaluationConstants.EG_BISHOP_TABLE);
+        mgPestoScore -= calculateScoreFor(blackRooks, EvaluationConstants.ROOK_VALUE, false, EvaluationConstants.MG_ROOK_TABLE);
+        egPestoScore -= calculateScoreFor(blackRooks, EvaluationConstants.ROOK_VALUE, false, EvaluationConstants.EG_ROOK_TABLE);
+        mgPestoScore -= calculateScoreFor(blackQueens, EvaluationConstants.QUEEN_VALUE, false, EvaluationConstants.MG_QUEEN_TABLE);
+        egPestoScore -= calculateScoreFor(blackQueens, EvaluationConstants.QUEEN_VALUE, false, EvaluationConstants.EG_QUEEN_TABLE);
+        mgPestoScore -= calculateScoreFor(blackKing, 0, false, EvaluationConstants.MG_KING_TABLE);
+        egPestoScore -= calculateScoreFor(blackKing, 0, false, EvaluationConstants.EG_KING_TABLE);
     }
 
     private int calculateScoreFor(long bitboard, int value, boolean white, int[] table) {
@@ -333,23 +271,6 @@ public class Bitboard {
         return score;
     }
 
-    private Piece getPieceFromChar(char c) {
-        return switch (c) {
-            case 'P' -> Piece.WHITE_PAWN;
-            case 'N' -> Piece.WHITE_KNIGHT;
-            case 'B' -> Piece.WHITE_BISHOP;
-            case 'R' -> Piece.WHITE_ROOK;
-            case 'Q' -> Piece.WHITE_QUEEN;
-            case 'K' -> Piece.WHITE_KING;
-            case 'p' -> Piece.BLACK_PAWN;
-            case 'n' -> Piece.BLACK_KNIGHT;
-            case 'b' -> Piece.BLACK_BISHOP;
-            case 'r' -> Piece.BLACK_ROOK;
-            case 'q' -> Piece.BLACK_QUEEN;
-            case 'k' -> Piece.BLACK_KING;
-            default -> Piece.NONE;
-        };
-    }
 
     public String getFen() {
         StringBuilder sb = new StringBuilder();
@@ -803,108 +724,11 @@ public class Bitboard {
     }
 
     public int generateLegalMoves(int[] moves) {
-        int[] pseudo = new int[256];
-        int count = generatePseudoLegalMoves(pseudo);
-        int legalCount = 0;
-
-        int kingSq = (sideToMove == Side.WHITE) ? whiteKingSq : blackKingSq;
-        Side us = sideToMove;
-        Side enemy = (us == Side.WHITE) ? Side.BLACK : Side.WHITE;
-
-        for (int i = 0; i < count; i++) {
-            int m = pseudo[i];
-            int from = m & 0x3F;
-            int to = (m >> 6) & 0x3F;
-
-            // Castling Path Check
-            if (kingSq != -1 && from == kingSq && Math.abs(to - from) == 2) {
-                if (isSquareAttacked(from, enemy)) continue;
-                int mid = (from + to) / 2;
-                if (isSquareAttacked(mid, enemy)) continue;
-            }
-
-            if (isLegalVirtual(m, kingSq)) {
-                moves[legalCount++] = m;
-            }
-        }
-        return legalCount;
+        return MoveGenerator.generateLegalMoves(this, moves);
     }
 
     private boolean isLegalVirtual(int move, int kingSq) {
-        int from = move & 0x3F;
-        int to = (move >> 6) & 0x3F;
-
-        Piece movingPiece = mailbox[from];
-        Side us = PIECE_SIDES[movingPiece.ordinal()];
-
-        long fromBit = 1L << from;
-        long toBit = 1L << to;
-        long occupied = occupiedSquares;
-        long ignoreMask = -1L;
-
-        int currentKingSq = kingSq;
-        if (movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) {
-            currentKingSq = to;
-        }
-
-        if ((movingPiece == Piece.WHITE_PAWN || movingPiece == Piece.BLACK_PAWN) &&
-                enPassantSquare != Square.NONE && to == enPassantSquare.ordinal()) {
-
-            int capSq = (us == Side.WHITE) ? to - 8 : to + 8;
-            long capBit = 1L << capSq;
-            occupied = (occupied & ~fromBit & ~capBit) | toBit;
-            ignoreMask = ~capBit;
-
-        } else {
-            occupied = (occupied & ~fromBit) | toBit;
-            if (mailbox[to] != Piece.NONE) {
-                ignoreMask = ~toBit;
-            }
-        }
-
-        if ((movingPiece == Piece.WHITE_KING || movingPiece == Piece.BLACK_KING) && Math.abs(to - from) == 2) {
-            int rFrom, rTo;
-            if (to > from) { rFrom = from + 3; rTo = from + 1; }
-            else { rFrom = from - 4; rTo = from - 1; }
-
-            occupied &= ~(1L << rFrom);
-            occupied |= (1L << rTo);
-        }
-
-        return !isSquareAttackedVirtual(currentKingSq, us == Side.WHITE ? Side.BLACK : Side.WHITE, occupied, ignoreMask);
-    }
-
-    private boolean isSquareAttackedVirtual(int sq, Side attackerSide, long occupied, long ignoreMask) {
-        if (attackerSide == Side.WHITE) {
-            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & whitePawns & ignoreMask) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & whiteKnights & ignoreMask) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & whiteKing & ignoreMask) != 0) return true;
-
-            long bishopsQueens = (whiteBishops | whiteQueens) & ignoreMask;
-            if (bishopsQueens != 0) {
-                if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
-            }
-
-            long rooksQueens = (whiteRooks | whiteQueens) & ignoreMask;
-            if (rooksQueens != 0) {
-                return (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0;
-            }
-        } else {
-            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & blackPawns & ignoreMask) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & blackKnights & ignoreMask) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & blackKing & ignoreMask) != 0) return true;
-
-            long bishopsQueens = (blackBishops | blackQueens) & ignoreMask;
-            if (bishopsQueens != 0) {
-                if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
-            }
-
-            long rooksQueens = (blackRooks | blackQueens) & ignoreMask;
-            if (rooksQueens != 0) {
-                return (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0;
-            }
-        }
-        return false;
+        return MoveGenerator.isLegalVirtual(this, move, kingSq);
     }
 
     public void doNullMove() {
@@ -944,20 +768,41 @@ public class Bitboard {
 
     @SuppressWarnings("RedundantIfStatement")
     public boolean isSquareAttacked(int sq, Side attackerSide) {
-        long occ = occupiedSquares;
+        return isSquareAttacked(sq, attackerSide, occupiedSquares, -1L);
+    }
+
+    public boolean isSquareAttacked(int sq, Side attackerSide, long occupied, long attackersMask) {
+        long pawns, knights, king, bishopsQueens, rooksQueens;
+        int pawnColorIndex;
+
         if (attackerSide == Side.WHITE) {
-            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & whitePawns) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & whiteKnights) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & whiteKing) != 0) return true;
-            if ((AttackLookups.getBishopAttacks(sq, occ) & (whiteBishops | whiteQueens)) != 0) return true;
-            if ((AttackLookups.getRookAttacks(sq, occ) & (whiteRooks | whiteQueens)) != 0) return true;
+            pawns = whitePawns;
+            knights = whiteKnights;
+            king = whiteKing;
+            bishopsQueens = whiteBishops | whiteQueens;
+            rooksQueens = whiteRooks | whiteQueens;
+            pawnColorIndex = Side.BLACK.ordinal();
         } else {
-            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & blackPawns) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & blackKnights) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & blackKing) != 0) return true;
-            if ((AttackLookups.getBishopAttacks(sq, occ) & (blackBishops | blackQueens)) != 0) return true;
-            if ((AttackLookups.getRookAttacks(sq, occ) & (blackRooks | blackQueens)) != 0) return true;
+            pawns = blackPawns;
+            knights = blackKnights;
+            king = blackKing;
+            bishopsQueens = blackBishops | blackQueens;
+            rooksQueens = blackRooks | blackQueens;
+            pawnColorIndex = Side.WHITE.ordinal();
         }
+
+        pawns &= attackersMask;
+        knights &= attackersMask;
+        king &= attackersMask;
+        bishopsQueens &= attackersMask;
+        rooksQueens &= attackersMask;
+
+        if ((AttackLookups.PAWN_ATTACKS[pawnColorIndex][sq] & pawns) != 0) return true;
+        if ((AttackLookups.KNIGHT_ATTACKS[sq] & knights) != 0) return true;
+        if ((AttackLookups.KING_ATTACKS[sq] & king) != 0) return true;
+        if (bishopsQueens != 0 && (AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
+        if (rooksQueens != 0 && (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
+        
         return false;
     }
 
@@ -997,6 +842,10 @@ public class Bitboard {
         return 0L;
     }
 
+    public long getOccupiedSquares() {
+        return occupiedSquares;
+    }
+
     public long getBitboard(Piece piece) {
         return switch (piece) {
             case WHITE_PAWN -> whitePawns;
@@ -1016,351 +865,11 @@ public class Bitboard {
     }
 
     public int generatePseudoLegalMoves(int[] moveList) {
-        int index = 0;
-        long friendly, enemy;
-        long myPawns, myKnights, myBishops, myRooks, myQueens, myKing;
-        
-        int promoRank, startRank;
-        boolean isWhite = (sideToMove == Side.WHITE);
-
-        if (isWhite) {
-            friendly = whitePieces;
-            enemy = blackPieces & ~blackKing;
-            myPawns = whitePawns;
-            myKnights = whiteKnights;
-            myBishops = whiteBishops;
-            myRooks = whiteRooks;
-            myQueens = whiteQueens;
-            myKing = whiteKing;
-            
-            promoRank = 7;
-            startRank = 1;
-        } else {
-            friendly = blackPieces;
-            enemy = whitePieces & ~whiteKing;
-            myPawns = blackPawns;
-            myKnights = blackKnights;
-            myBishops = blackBishops;
-            myRooks = blackRooks;
-            myQueens = blackQueens;
-            myKing = blackKing;
-            
-            promoRank = 0;
-            startRank = 6;
-        }
-
-        long occupied = occupiedSquares;
-
-        // --- Pawns ---
-        long p = myPawns;
-        while (p != 0) {
-            int sq = Long.numberOfTrailingZeros(p);
-            p &= p - 1;
-
-            int rank = sq / 8;
-            int file = sq % 8;
-
-            int nextRank = isWhite ? rank + 1 : rank - 1;
-            int forwardSq = nextRank * 8 + file;
-            if (((1L << forwardSq) & occupied) == 0) {
-                if (nextRank == promoRank) {
-                    addPromoMoves(moveList, index, sq, forwardSq);
-                    index += 4;
-                } else {
-                    moveList[index++] = encodeMove(sq, forwardSq, 0);
-                    if (rank == startRank) {
-                        int doubleRank = isWhite ? rank + 2 : rank - 2;
-                        int doubleSq = doubleRank * 8 + file;
-                        if (((1L << doubleSq) & occupied) == 0) {
-                            moveList[index++] = encodeMove(sq, doubleSq, 0);
-                        }
-                    }
-                }
-            }
-
-            for (int dFile = -1; dFile <= 1; dFile += 2) {
-                if (file + dFile >= 0 && file + dFile < 8) {
-                    int captureSq = nextRank * 8 + (file + dFile);
-                    long captureBit = 1L << captureSq;
-                    if ((captureBit & enemy) != 0) {
-                        if (nextRank == promoRank) {
-                            addPromoMoves(moveList, index, sq, captureSq);
-                            index += 4;
-                        } else {
-                            moveList[index++] = encodeMove(sq, captureSq, 0);
-                        }
-                    } else if (captureSq == enPassantSquare.ordinal()) {
-                        moveList[index++] = encodeMove(sq, captureSq, 0);
-                    }
-                }
-            }
-        }
-
-        // --- Knights ---
-        long n = myKnights;
-        while (n != 0) {
-            int sq = Long.numberOfTrailingZeros(n);
-            n &= n - 1;
-            long attacks = AttackLookups.KNIGHT_ATTACKS[sq] & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = encodeMove(sq, to, 0);
-            }
-        }
-
-        // --- Bishops ---
-        long b = myBishops;
-        while (b != 0) {
-            int sq = Long.numberOfTrailingZeros(b);
-            b &= b - 1;
-            long attacks = AttackLookups.getBishopAttacks(sq, occupied) & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = encodeMove(sq, to, 0);
-            }
-        }
-
-        // --- Rooks ---
-        long r = myRooks;
-        while (r != 0) {
-            int sq = Long.numberOfTrailingZeros(r);
-            r &= r - 1;
-            long attacks = AttackLookups.getRookAttacks(sq, occupied) & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = encodeMove(sq, to, 0);
-            }
-        }
-
-        // --- Queens ---
-        long q = myQueens;
-        while (q != 0) {
-            int sq = Long.numberOfTrailingZeros(q);
-            q &= q - 1;
-            long attacks = AttackLookups.getQueenAttacks(sq, occupied) & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = encodeMove(sq, to, 0);
-            }
-        }
-
-        // --- King ---
-        long k = myKing;
-        while (k != 0) {
-            int sq = Long.numberOfTrailingZeros(k);
-            k &= k - 1;
-            long attacks = AttackLookups.KING_ATTACKS[sq] & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = encodeMove(sq, to, 0);
-            }
-        }
-
-        // --- Castling ---
-        if (isWhite) {
-            if ((castlingRights & CASTLE_WK) != 0) {
-                if ((occupied & ((1L << 5) | (1L << 6))) == 0) {
-                    if (!isSquareAttacked(4, Side.BLACK) && !isSquareAttacked(5, Side.BLACK) && !isSquareAttacked(6, Side.BLACK)) {
-                        moveList[index++] = encodeMove(4, 6, 0);
-                    }
-                }
-            }
-            if ((castlingRights & CASTLE_WQ) != 0) {
-                if ((occupied & ((1L << 1) | (1L << 2) | (1L << 3))) == 0) {
-                    if (!isSquareAttacked(4, Side.BLACK) && !isSquareAttacked(3, Side.BLACK) && !isSquareAttacked(2, Side.BLACK)) {
-                        moveList[index++] = encodeMove(4, 2, 0);
-                    }
-                }
-            }
-        } else {
-            if ((castlingRights & CASTLE_BK) != 0) {
-                if ((occupied & ((1L << 61) | (1L << 62))) == 0) {
-                    if (!isSquareAttacked(60, Side.WHITE) && !isSquareAttacked(61, Side.WHITE) && !isSquareAttacked(62, Side.WHITE)) {
-                        moveList[index++] = encodeMove(60, 62, 0);
-                    }
-                }
-            }
-            if ((castlingRights & CASTLE_BQ) != 0) {
-                if ((occupied & ((1L << 57) | (1L << 58) | (1L << 59))) == 0) {
-                    if (!isSquareAttacked(60, Side.WHITE) && !isSquareAttacked(59, Side.WHITE) && !isSquareAttacked(58, Side.WHITE)) {
-                        moveList[index++] = encodeMove(60, 58, 0);
-                    }
-                }
-            }
-        }
-
-        return index;
+        return MoveGenerator.generatePseudoLegalMoves(this, moveList);
     }
 
     public int generateLoudMoves(int[] moveList) {
-        int index = 0;
-        long friendly, enemy;
-        long myPawns, myKnights, myBishops, myRooks, myQueens, myKing;
-        
-        int promoRank, startRank;
-        boolean isWhite = (sideToMove == Side.WHITE);
-        int kingSq = isWhite ? whiteKingSq : blackKingSq;
-
-        if (isWhite) {
-            friendly = whitePieces;
-            enemy = blackPieces & ~blackKing;
-            myPawns = whitePawns;
-            myKnights = whiteKnights;
-            myBishops = whiteBishops;
-            myRooks = whiteRooks;
-            myQueens = whiteQueens;
-            myKing = whiteKing;
-            
-            promoRank = 7;
-            startRank = 1;
-        } else {
-            friendly = blackPieces;
-            enemy = whitePieces & ~whiteKing;
-            myPawns = blackPawns;
-            myKnights = blackKnights;
-            myBishops = blackBishops;
-            myRooks = blackRooks;
-            myQueens = blackQueens;
-            myKing = blackKing;
-            
-            promoRank = 0;
-            startRank = 6;
-        }
-
-        long occupied = occupiedSquares;
-
-        // --- Pawns ---
-        long p = myPawns;
-        while (p != 0) {
-            int sq = Long.numberOfTrailingZeros(p);
-            p &= p - 1;
-
-            int rank = sq / 8;
-            int file = sq % 8;
-
-            int nextRank = isWhite ? rank + 1 : rank - 1;
-            int forwardSq = nextRank * 8 + file;
-            
-            // Check for Promotions (Capture and Non-Capture)
-            if (nextRank == promoRank) {
-                // Forward push promotion
-                if (((1L << forwardSq) & occupied) == 0) {
-                     // Add promo moves
-                     addPromoMoves(moveList, index, sq, forwardSq);
-                     index += 4;
-                }
-                // Capture promotion
-                for (int dFile = -1; dFile <= 1; dFile += 2) {
-                    if (file + dFile >= 0 && file + dFile < 8) {
-                        int captureSq = nextRank * 8 + (file + dFile);
-                        long captureBit = 1L << captureSq;
-                        if ((captureBit & enemy) != 0) {
-                             addPromoMoves(moveList, index, sq, captureSq);
-                             index += 4;
-                        }
-                    }
-                }
-            } else {
-                // Normal Captures (Non-Promo)
-                for (int dFile = -1; dFile <= 1; dFile += 2) {
-                    if (file + dFile >= 0 && file + dFile < 8) {
-                        int captureSq = nextRank * 8 + (file + dFile);
-                        long captureBit = 1L << captureSq;
-                        if ((captureBit & enemy) != 0) {
-                            int move = encodeMove(sq, captureSq, 0);
-                            moveList[index++] = move;
-                        } else if (captureSq == enPassantSquare.ordinal()) {
-                            int move = encodeMove(sq, captureSq, 0);
-                            moveList[index++] = move;
-                        }
-                    }
-                }
-            }
-        }
-
-        // --- Knights ---
-        long n = myKnights;
-        while (n != 0) {
-            int sq = Long.numberOfTrailingZeros(n);
-            n &= n - 1;
-            long attacks = AttackLookups.KNIGHT_ATTACKS[sq] & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
-
-        // --- Bishops ---
-        long b = myBishops;
-        while (b != 0) {
-            int sq = Long.numberOfTrailingZeros(b);
-            b &= b - 1;
-            long attacks = AttackLookups.getBishopAttacks(sq, occupied) & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
-
-        // --- Rooks ---
-        long r = myRooks;
-        while (r != 0) {
-            int sq = Long.numberOfTrailingZeros(r);
-            r &= r - 1;
-            long attacks = AttackLookups.getRookAttacks(sq, occupied) & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
-
-        // --- Queens ---
-        long q = myQueens;
-        while (q != 0) {
-            int sq = Long.numberOfTrailingZeros(q);
-            q &= q - 1;
-            long attacks = AttackLookups.getQueenAttacks(sq, occupied) & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
-
-        // --- King ---
-        long k = myKing;
-        while (k != 0) {
-            int sq = Long.numberOfTrailingZeros(k);
-            k &= k - 1;
-            long attacks = AttackLookups.KING_ATTACKS[sq] & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
-
-        return index;
-    }
-
-    private void addPromoMoves(int[] moveList, int index, int from, int to) {
-        moveList[index] = encodeMove(from, to, 1);
-        moveList[index+1] = encodeMove(from, to, 2);
-        moveList[index+2] = encodeMove(from, to, 3);
-        moveList[index+3] = encodeMove(from, to, 4);
+        return MoveGenerator.generateLoudMoves(this, moveList);
     }
 
     public static int encodeMove(int from, int to, int promo) {
