@@ -2,6 +2,7 @@ package ch.adjudicator.agent.engine.board;
 
 import ch.adjudicator.agent.engine.Zobrist;
 import ch.adjudicator.agent.engine.ZobristHasher;
+import ch.adjudicator.agent.engine.Evaluator;
 import com.github.bhlangonijr.chesslib.CastleRight;
 import com.github.bhlangonijr.chesslib.Piece;
 import com.github.bhlangonijr.chesslib.Side;
@@ -20,6 +21,11 @@ public class Bitboard {
     private static final Side[] PIECE_SIDES = new Side[PIECES.length];
     // Map Piece enum to Zobrist piece index (0=Pawn..5=King)
     private static final int[] ZOBRIST_PIECE_INDICES = new int[PIECES.length];
+    
+    // Maps for Incremental Evaluation
+    private static final int[] PIECE_VALUES = new int[PIECES.length];
+    private static final int[][] MG_TABLES = new int[PIECES.length][];
+    private static final int[][] EG_TABLES = new int[PIECES.length][];
 
     static {
         for (Piece p : PIECES) {
@@ -38,6 +44,41 @@ public class Bitboard {
                     default -> -1;
                 };
                 ZOBRIST_PIECE_INDICES[p.ordinal()] = type;
+                
+                // Initialize Eval Tables
+                switch (p.getPieceType()) {
+                    case PAWN -> {
+                        PIECE_VALUES[p.ordinal()] = Evaluator.PAWN_VALUE;
+                        MG_TABLES[p.ordinal()] = Evaluator.MG_PAWN_TABLE;
+                        EG_TABLES[p.ordinal()] = Evaluator.EG_PAWN_TABLE;
+                    }
+                    case KNIGHT -> {
+                        PIECE_VALUES[p.ordinal()] = Evaluator.KNIGHT_VALUE;
+                        MG_TABLES[p.ordinal()] = Evaluator.MG_KNIGHT_TABLE;
+                        EG_TABLES[p.ordinal()] = Evaluator.EG_KNIGHT_TABLE;
+                    }
+                    case BISHOP -> {
+                        PIECE_VALUES[p.ordinal()] = Evaluator.BISHOP_VALUE;
+                        MG_TABLES[p.ordinal()] = Evaluator.MG_BISHOP_TABLE;
+                        EG_TABLES[p.ordinal()] = Evaluator.EG_BISHOP_TABLE;
+                    }
+                    case ROOK -> {
+                        PIECE_VALUES[p.ordinal()] = Evaluator.ROOK_VALUE;
+                        MG_TABLES[p.ordinal()] = Evaluator.MG_ROOK_TABLE;
+                        EG_TABLES[p.ordinal()] = Evaluator.EG_ROOK_TABLE;
+                    }
+                    case QUEEN -> {
+                        PIECE_VALUES[p.ordinal()] = Evaluator.QUEEN_VALUE;
+                        MG_TABLES[p.ordinal()] = Evaluator.MG_QUEEN_TABLE;
+                        EG_TABLES[p.ordinal()] = Evaluator.EG_QUEEN_TABLE;
+                    }
+                    case KING -> {
+                        PIECE_VALUES[p.ordinal()] = 0;
+                        MG_TABLES[p.ordinal()] = Evaluator.MG_KING_TABLE;
+                        EG_TABLES[p.ordinal()] = Evaluator.EG_KING_TABLE;
+                    }
+                    default -> {}
+                }
             }
         }
     }
@@ -60,6 +101,8 @@ public class Bitboard {
     private int halfMoveClock;
     private int fullMoveNumber;
     private long zobristHash;
+    private int mgPestoScore;
+    private int egPestoScore;
 
     private static final int MAX_GAME_MOVES = 2048;
 
@@ -242,6 +285,51 @@ public class Bitboard {
 
         // Full Zobrist calculation for initial position
         zobristHash = ZobristHasher.getZobristKey(this);
+        initPestoScores();
+    }
+
+    private void initPestoScores() {
+        mgPestoScore = 0;
+        egPestoScore = 0;
+
+        // White
+        mgPestoScore += calculateScoreFor(whitePawns, Evaluator.PAWN_VALUE, true, Evaluator.MG_PAWN_TABLE);
+        egPestoScore += calculateScoreFor(whitePawns, Evaluator.PAWN_VALUE, true, Evaluator.EG_PAWN_TABLE);
+        mgPestoScore += calculateScoreFor(whiteKnights, Evaluator.KNIGHT_VALUE, true, Evaluator.MG_KNIGHT_TABLE);
+        egPestoScore += calculateScoreFor(whiteKnights, Evaluator.KNIGHT_VALUE, true, Evaluator.EG_KNIGHT_TABLE);
+        mgPestoScore += calculateScoreFor(whiteBishops, Evaluator.BISHOP_VALUE, true, Evaluator.MG_BISHOP_TABLE);
+        egPestoScore += calculateScoreFor(whiteBishops, Evaluator.BISHOP_VALUE, true, Evaluator.EG_BISHOP_TABLE);
+        mgPestoScore += calculateScoreFor(whiteRooks, Evaluator.ROOK_VALUE, true, Evaluator.MG_ROOK_TABLE);
+        egPestoScore += calculateScoreFor(whiteRooks, Evaluator.ROOK_VALUE, true, Evaluator.EG_ROOK_TABLE);
+        mgPestoScore += calculateScoreFor(whiteQueens, Evaluator.QUEEN_VALUE, true, Evaluator.MG_QUEEN_TABLE);
+        egPestoScore += calculateScoreFor(whiteQueens, Evaluator.QUEEN_VALUE, true, Evaluator.EG_QUEEN_TABLE);
+        mgPestoScore += calculateScoreFor(whiteKing, 0, true, Evaluator.MG_KING_TABLE);
+        egPestoScore += calculateScoreFor(whiteKing, 0, true, Evaluator.EG_KING_TABLE);
+
+        // Black
+        mgPestoScore -= calculateScoreFor(blackPawns, Evaluator.PAWN_VALUE, false, Evaluator.MG_PAWN_TABLE);
+        egPestoScore -= calculateScoreFor(blackPawns, Evaluator.PAWN_VALUE, false, Evaluator.EG_PAWN_TABLE);
+        mgPestoScore -= calculateScoreFor(blackKnights, Evaluator.KNIGHT_VALUE, false, Evaluator.MG_KNIGHT_TABLE);
+        egPestoScore -= calculateScoreFor(blackKnights, Evaluator.KNIGHT_VALUE, false, Evaluator.EG_KNIGHT_TABLE);
+        mgPestoScore -= calculateScoreFor(blackBishops, Evaluator.BISHOP_VALUE, false, Evaluator.MG_BISHOP_TABLE);
+        egPestoScore -= calculateScoreFor(blackBishops, Evaluator.BISHOP_VALUE, false, Evaluator.EG_BISHOP_TABLE);
+        mgPestoScore -= calculateScoreFor(blackRooks, Evaluator.ROOK_VALUE, false, Evaluator.MG_ROOK_TABLE);
+        egPestoScore -= calculateScoreFor(blackRooks, Evaluator.ROOK_VALUE, false, Evaluator.EG_ROOK_TABLE);
+        mgPestoScore -= calculateScoreFor(blackQueens, Evaluator.QUEEN_VALUE, false, Evaluator.MG_QUEEN_TABLE);
+        egPestoScore -= calculateScoreFor(blackQueens, Evaluator.QUEEN_VALUE, false, Evaluator.EG_QUEEN_TABLE);
+        mgPestoScore -= calculateScoreFor(blackKing, 0, false, Evaluator.MG_KING_TABLE);
+        egPestoScore -= calculateScoreFor(blackKing, 0, false, Evaluator.EG_KING_TABLE);
+    }
+
+    private int calculateScoreFor(long bitboard, int value, boolean white, int[] table) {
+        int score = 0;
+        while (bitboard != 0) {
+            int square = Long.numberOfTrailingZeros(bitboard);
+            int tableSquare = white ? (square ^ 56) : square;
+            score += value + table[tableSquare];
+            bitboard &= bitboard - 1;
+        }
+        return score;
     }
 
     private Piece getPieceFromChar(char c) {
@@ -327,6 +415,14 @@ public class Bitboard {
 
     public long getZobristKey() {
         return zobristHash;
+    }
+
+    public int getMgPestoScore() {
+        return mgPestoScore;
+    }
+
+    public int getEgPestoScore() {
+        return egPestoScore;
     }
 
     public Side getSideToMove() {
@@ -497,6 +593,8 @@ public class Bitboard {
     }
 
     private void putPieceInternal(Piece piece, int sqIdx) {
+        if (piece == Piece.NONE) return;
+
         long bit = 1L << sqIdx;
 
         switch (piece) {
@@ -523,9 +621,31 @@ public class Bitboard {
         }
         occupiedSquares |= bit;
         mailbox[sqIdx] = piece;
+
+        // Incremental Score Update
+        int pIdx = piece.ordinal();
+        int value = PIECE_VALUES[pIdx];
+        int[] mgTable = MG_TABLES[pIdx];
+        int[] egTable = EG_TABLES[pIdx];
+
+        boolean isWhite = PIECE_SIDES[pIdx] == Side.WHITE;
+        int tableSquare = isWhite ? (sqIdx ^ 56) : sqIdx;
+
+        int scoreMg = value + mgTable[tableSquare];
+        int scoreEg = value + egTable[tableSquare];
+
+        if (isWhite) {
+            mgPestoScore += scoreMg;
+            egPestoScore += scoreEg;
+        } else {
+            mgPestoScore -= scoreMg;
+            egPestoScore -= scoreEg;
+        }
     }
 
     private void removePieceInternal(Piece piece, int sqIdx) {
+        if (piece == Piece.NONE) return;
+
         long bit = 1L << sqIdx;
         long mask = ~bit;
 
@@ -551,6 +671,26 @@ public class Bitboard {
         }
         occupiedSquares &= mask;
         mailbox[sqIdx] = Piece.NONE;
+
+        // Incremental Score Update
+        int pIdx = piece.ordinal();
+        int value = PIECE_VALUES[pIdx];
+        int[] mgTable = MG_TABLES[pIdx];
+        int[] egTable = EG_TABLES[pIdx];
+
+        boolean isWhite = PIECE_SIDES[pIdx] == Side.WHITE;
+        int tableSquare = isWhite ? (sqIdx ^ 56) : sqIdx;
+
+        int scoreMg = value + mgTable[tableSquare];
+        int scoreEg = value + egTable[tableSquare];
+
+        if (isWhite) {
+            mgPestoScore -= scoreMg;
+            egPestoScore -= scoreEg;
+        } else {
+            mgPestoScore += scoreMg;
+            egPestoScore += scoreEg;
+        }
     }
 
     public void doMove(Move move) {
