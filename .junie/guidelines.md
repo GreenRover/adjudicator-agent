@@ -1,1 +1,2 @@
 - Prefer hamcrest for assertions in tests
+- Prefer lombok @Get, @Set or @Data over getter/setters
