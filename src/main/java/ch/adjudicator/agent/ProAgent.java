@@ -13,6 +13,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * High-performance native chess agent capable of defeating chess masters.
@@ -36,6 +40,14 @@ public class ProAgent implements Agent {
     private boolean lastMoveFromBook;
     private Search ponderSearch;
     private Thread ponderThread;
+    
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "PonderWatchdog");
+        t.setDaemon(true);
+        return t;
+    });
+    private ScheduledFuture<?> watchdogTask;
+    private long ponderTimeoutMs = 5 * 60 * 1000; // 5 minutes
 
     public ProAgent(String name, boolean monitorCpuTemp) {
         this.name = name;
@@ -232,6 +244,9 @@ public class ProAgent implements Agent {
                     ponderSearch.findBestMove(36000000L); // 10 hours
                 });
                 ponderThread.start();
+
+                // Schedule watchdog
+                watchdogTask = watchdog.schedule(this::triggerEndGameDueToTimeout, ponderTimeoutMs, TimeUnit.MILLISECONDS);
             }
         } else {
             LOGGER.info("[{}] Pondering disabled due to high CPU temperature", name);
@@ -347,7 +362,32 @@ public class ProAgent implements Agent {
         return Bitboard.encodeMove(move.getFrom().ordinal(), move.getTo().ordinal(), promo);
     }
 
+    /**
+     * Set ponder timeout for testing.
+     */
+    protected void setPonderTimeoutMs(long ms) {
+        this.ponderTimeoutMs = ms;
+    }
+
+    protected void disableBookForTesting() {
+        this.disableBookLookup = true;
+    }
+
+    /**
+     * Trigger end game due to pondering timeout.
+     * Can be overridden for testing.
+     */
+    protected void triggerEndGameDueToTimeout() {
+        LOGGER.error("[{}] Pondering timeout ({} ms). Ending game.", name, ponderTimeoutMs);
+        System.exit(1);
+    }
+
     private void stopPondering() {
+        if (watchdogTask != null) {
+            watchdogTask.cancel(false);
+            watchdogTask = null;
+        }
+
         if (ponderSearch != null) {
             ponderSearch.stop();
         }

@@ -884,7 +884,7 @@ public class Bitboard {
 
         if (isWhite) {
             friendly = whitePieces;
-            enemy = blackPieces;
+            enemy = blackPieces & ~blackKing;
             myPawns = whitePawns;
             myKnights = whiteKnights;
             myBishops = whiteBishops;
@@ -896,7 +896,7 @@ public class Bitboard {
             startRank = 1;
         } else {
             friendly = blackPieces;
-            enemy = whitePieces;
+            enemy = whitePieces & ~whiteKing;
             myPawns = blackPawns;
             myKnights = blackKnights;
             myBishops = blackBishops;
@@ -1067,7 +1067,7 @@ public class Bitboard {
 
         if (isWhite) {
             friendly = whitePieces;
-            enemy = blackPieces;
+            enemy = blackPieces & ~blackKing;
             myPawns = whitePawns;
             myKnights = whiteKnights;
             myBishops = whiteBishops;
@@ -1079,7 +1079,7 @@ public class Bitboard {
             startRank = 1;
         } else {
             friendly = blackPieces;
-            enemy = whitePieces;
+            enemy = whitePieces & ~whiteKing;
             myPawns = blackPawns;
             myKnights = blackKnights;
             myBishops = blackBishops;
@@ -1110,10 +1110,8 @@ public class Bitboard {
                 // Forward push promotion
                 if (((1L << forwardSq) & occupied) == 0) {
                      // Add promo moves
-                     if (isLegalVirtual(encodeMove(sq, forwardSq, 1), kingSq)) {
-                         addPromoMoves(moveList, index, sq, forwardSq);
-                         index += 4;
-                     }
+                     addPromoMoves(moveList, index, sq, forwardSq);
+                     index += 4;
                 }
                 // Capture promotion
                 for (int dFile = -1; dFile <= 1; dFile += 2) {
@@ -1121,10 +1119,8 @@ public class Bitboard {
                         int captureSq = nextRank * 8 + (file + dFile);
                         long captureBit = 1L << captureSq;
                         if ((captureBit & enemy) != 0) {
-                             if (isLegalVirtual(encodeMove(sq, captureSq, 1), kingSq)) {
-                                 addPromoMoves(moveList, index, sq, captureSq);
-                                 index += 4;
-                             }
+                             addPromoMoves(moveList, index, sq, captureSq);
+                             index += 4;
                         }
                     }
                 }
@@ -1136,14 +1132,10 @@ public class Bitboard {
                         long captureBit = 1L << captureSq;
                         if ((captureBit & enemy) != 0) {
                             int move = encodeMove(sq, captureSq, 0);
-                            if (isLegalVirtual(move, kingSq)) {
-                                moveList[index++] = move;
-                            }
+                            moveList[index++] = move;
                         } else if (captureSq == enPassantSquare.ordinal()) {
                             int move = encodeMove(sq, captureSq, 0);
-                            if (isLegalVirtual(move, kingSq)) {
-                                moveList[index++] = move;
-                            }
+                            moveList[index++] = move;
                         }
                     }
                 }
@@ -1160,9 +1152,7 @@ public class Bitboard {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
                 int move = encodeMove(sq, to, 0);
-                if (isLegalVirtual(move, kingSq)) {
-                    moveList[index++] = move;
-                }
+                moveList[index++] = move;
             }
         }
 
@@ -1176,9 +1166,7 @@ public class Bitboard {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
                 int move = encodeMove(sq, to, 0);
-                if (isLegalVirtual(move, kingSq)) {
-                    moveList[index++] = move;
-                }
+                moveList[index++] = move;
             }
         }
 
@@ -1192,9 +1180,7 @@ public class Bitboard {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
                 int move = encodeMove(sq, to, 0);
-                if (isLegalVirtual(move, kingSq)) {
-                    moveList[index++] = move;
-                }
+                moveList[index++] = move;
             }
         }
 
@@ -1208,9 +1194,7 @@ public class Bitboard {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
                 int move = encodeMove(sq, to, 0);
-                if (isLegalVirtual(move, kingSq)) {
-                    moveList[index++] = move;
-                }
+                moveList[index++] = move;
             }
         }
 
@@ -1224,9 +1208,7 @@ public class Bitboard {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
                 int move = encodeMove(sq, to, 0);
-                if (isLegalVirtual(move, kingSq)) {
-                    moveList[index++] = move;
-                }
+                moveList[index++] = move;
             }
         }
 

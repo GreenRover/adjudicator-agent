@@ -306,6 +306,14 @@ public class Search {
 
         boolean inCheck = board.isKingAttacked();
 
+        // Reverse Futility Pruning (RFP)
+        if (depth <= 3 && !inCheck && ply > 0 && beta < MATE_SCORE) {
+             int eval = Evaluator.evaluate(board);
+             if (eval >= beta + (depth * 120)) {
+                 return beta;
+             }
+        }
+
         // Null Move Pruning
         if (enableNmp && depth >= 3 && !inCheck) {
             Side side = board.getSideToMove();
@@ -449,6 +457,9 @@ public class Search {
             }
         }
 
+        // Prevent infinite QS explosions
+        if (qsDepth > 20) return Evaluator.evaluate(board);
+
         nodesSearched++;
 
         if (ply >= MAX_DEPTH) {
@@ -457,42 +468,28 @@ public class Search {
 
         // Fix Tactical Blindness: Check for check
         boolean inCheck = board.isKingAttacked();
-        int standPat = -INFINITY;
+        
+        // Stand-pat: evaluate current position
+        // Even if in check, use Eval as baseline to avoid false mate detection 
+        // when Q-Search is restricted to Loud Moves only.
+        int standPat = Evaluator.evaluate(board);
 
-        if (inCheck) {
-            // Force alpha to -INFINITY (must find evasion)
-            alpha = -INFINITY;
-        } else {
-            // Stand-pat: evaluate current position
-            standPat = Evaluator.evaluate(board);
+        if (standPat >= beta) {
+            return beta;
+        }
 
-            if (standPat >= beta) {
-                return beta;
-            }
-
-            // DELTA PRUNING
-            if (alpha < standPat) {
-                alpha = standPat;
-            }
+        if (alpha < standPat) {
+            alpha = standPat;
         }
 
         // Generate moves
-        // If in check: ALL legal moves (evasions)
-        // If not in check: Only Loud moves (Captures/Promotions)
+        // Only Loud moves (Captures/Promotions), regardless of check state
         int[] moves = moveBuffer[ply];
-        int count;
-        if (inCheck) {
-            count = board.generateLegalMoves(moves);
-        } else {
-            count = board.generateLoudMoves(moves);
-        }
-
-        // Check for Checkmate/Stalemate (only if in check and no moves)
-        if (inCheck && count == 0) {
-            return -MATE_SCORE + (MAX_DEPTH - ply);
-        }
+        int count = board.generateLoudMoves(moves);
 
         for (int i = 0; i < count; i++) {
+            // Move Ordering for Q-Search
+            moveOrdering.pickBestMove(board, moves, count, i, 0, ply, true);
             int move = moves[i];
             
             boolean isCap = isCapture(move);
@@ -516,6 +513,11 @@ public class Search {
             }
             
             board.makeMove(move);
+            if (isIllegal(board)) {
+                board.unmakeMove(move);
+                continue;
+            }
+
             int score = -quiescence(-beta, -alpha, ply + 1, qsDepth + 1);
             board.unmakeMove(move);
             
@@ -557,5 +559,16 @@ public class Search {
             case KING -> StaticExchangeEvaluator.KING_VALUE;
             default -> 0;
         };
+    }
+
+    private boolean isIllegal(Bitboard board) {
+        Side sideToMove = board.getSideToMove();
+        Side previousSide = (sideToMove == Side.WHITE) ? Side.BLACK : Side.WHITE;
+        long kingBb = board.getBitboard(previousSide == Side.WHITE ? Piece.WHITE_KING : Piece.BLACK_KING);
+        int kingSq = Long.numberOfTrailingZeros(kingBb);
+        if (kingSq == 64) {
+             return true; // King is missing, definitely illegal
+        }
+        return board.isSquareAttacked(kingSq, sideToMove);
     }
 }

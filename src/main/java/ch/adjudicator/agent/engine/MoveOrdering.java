@@ -149,6 +149,10 @@ public class MoveOrdering {
      * Higher score = search first.
      */
     public int rateMove(Bitboard board, int move, int hashMove, int ply) {
+        return rateMove(board, move, hashMove, ply, false);
+    }
+
+    public int rateMove(Bitboard board, int move, int hashMove, int ply, boolean qSearch) {
         // 1. Hash Move (from TT) - Highest priority
         if (move == hashMove) {
             return 20000000;
@@ -181,6 +185,10 @@ public class MoveOrdering {
             score = Math.max(score, 950000);
         }
 
+        if (qSearch) {
+            return score;
+        }
+
         // 4. Killer Moves
         if (isKiller(move, ply)) {
             if (move == killerMoves[ply][0]) {
@@ -195,16 +203,6 @@ public class MoveOrdering {
             score += historyScores[from][to];
         }
 
-        // 6. Checking Moves (bonus to find tactics)
-        // Only check if score is not already high (Winning Capture or Hash)
-        if (score < 960000) {
-            board.makeMove(move);
-            if (board.isKingAttacked()) {
-                score = 960000;
-            }
-            board.unmakeMove(move);
-        }
-
         return score;
     }
 
@@ -213,6 +211,10 @@ public class MoveOrdering {
      * This is more efficient than sorting the entire list.
      */
     public void pickBestMove(Bitboard board, int[] moves, int count, int currentIndex, int hashMove, int ply) {
+        pickBestMove(board, moves, count, currentIndex, hashMove, ply, false);
+    }
+
+    public void pickBestMove(Bitboard board, int[] moves, int count, int currentIndex, int hashMove, int ply, boolean qSearch) {
         if (currentIndex >= count) return;
 
         int bestScore = Integer.MIN_VALUE;
@@ -220,7 +222,7 @@ public class MoveOrdering {
 
         for (int i = currentIndex; i < count; i++) {
             int move = moves[i];
-            int score = rateMove(board, move, hashMove, ply);
+            int score = rateMove(board, move, hashMove, ply, qSearch);
 
             if (score > bestScore) {
                 bestScore = score;
