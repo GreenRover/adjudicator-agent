@@ -75,40 +75,7 @@ public class MoveGenerator {
             occupied |= (1L << rTo);
         }
 
-        return !isSquareAttackedVirtual(board, currentKingSq, us == Side.WHITE ? Side.BLACK : Side.WHITE, occupied, ignoreMask);
-    }
-
-    static boolean isSquareAttackedVirtual(Bitboard board, int sq, Side attackerSide, long occupied, long ignoreMask) {
-        if (attackerSide == Side.WHITE) {
-            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & board.whitePawns & ignoreMask) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & board.whiteKnights & ignoreMask) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & board.whiteKing & ignoreMask) != 0) return true;
-
-            long bishopsQueens = (board.whiteBishops | board.whiteQueens) & ignoreMask;
-            if (bishopsQueens != 0) {
-                if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
-            }
-
-            long rooksQueens = (board.whiteRooks | board.whiteQueens) & ignoreMask;
-            if (rooksQueens != 0) {
-                return (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0;
-            }
-        } else {
-            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & board.blackPawns & ignoreMask) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & board.blackKnights & ignoreMask) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & board.blackKing & ignoreMask) != 0) return true;
-
-            long bishopsQueens = (board.blackBishops | board.blackQueens) & ignoreMask;
-            if (bishopsQueens != 0) {
-                if ((AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
-            }
-
-            long rooksQueens = (board.blackRooks | board.blackQueens) & ignoreMask;
-            if (rooksQueens != 0) {
-                return (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0;
-            }
-        }
-        return false;
+        return !board.isSquareAttacked(currentKingSq, us == Side.WHITE ? Side.BLACK : Side.WHITE, occupied, ignoreMask);
     }
 
     public static int generatePseudoLegalMoves(Bitboard board, int[] moveList) {
@@ -193,69 +160,19 @@ public class MoveGenerator {
         }
 
         // --- Knights ---
-        long n = myKnights;
-        while (n != 0) {
-            int sq = Long.numberOfTrailingZeros(n);
-            n &= n - 1;
-            long attacks = AttackLookups.KNIGHT_ATTACKS[sq] & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
-            }
-        }
+        index = generateStepMoves(myKnights, moveList, index, ~friendly, AttackLookups.KNIGHT_ATTACKS);
 
         // --- Bishops ---
-        long b = myBishops;
-        while (b != 0) {
-            int sq = Long.numberOfTrailingZeros(b);
-            b &= b - 1;
-            long attacks = AttackLookups.getBishopAttacks(sq, occupied) & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
-            }
-        }
+        index = generateSlidingMoves(myBishops, moveList, index, ~friendly, occupied, 0);
 
         // --- Rooks ---
-        long r = myRooks;
-        while (r != 0) {
-            int sq = Long.numberOfTrailingZeros(r);
-            r &= r - 1;
-            long attacks = AttackLookups.getRookAttacks(sq, occupied) & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
-            }
-        }
+        index = generateSlidingMoves(myRooks, moveList, index, ~friendly, occupied, 1);
 
         // --- Queens ---
-        long q = myQueens;
-        while (q != 0) {
-            int sq = Long.numberOfTrailingZeros(q);
-            q &= q - 1;
-            long attacks = AttackLookups.getQueenAttacks(sq, occupied) & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
-            }
-        }
+        index = generateSlidingMoves(myQueens, moveList, index, ~friendly, occupied, 2);
 
         // --- King ---
-        long k = myKing;
-        while (k != 0) {
-            int sq = Long.numberOfTrailingZeros(k);
-            k &= k - 1;
-            long attacks = AttackLookups.KING_ATTACKS[sq] & ~friendly;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
-            }
-        }
+        index = generateStepMoves(myKing, moveList, index, ~friendly, AttackLookups.KING_ATTACKS);
 
         // --- Castling ---
         int castling = board.castlingRights;
@@ -372,75 +289,53 @@ public class MoveGenerator {
         }
 
         // --- Knights ---
-        long n = myKnights;
-        while (n != 0) {
-            int sq = Long.numberOfTrailingZeros(n);
-            n &= n - 1;
-            long attacks = AttackLookups.KNIGHT_ATTACKS[sq] & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = Bitboard.encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
+        index = generateStepMoves(myKnights, moveList, index, enemy, AttackLookups.KNIGHT_ATTACKS);
 
         // --- Bishops ---
-        long b = myBishops;
-        while (b != 0) {
-            int sq = Long.numberOfTrailingZeros(b);
-            b &= b - 1;
-            long attacks = AttackLookups.getBishopAttacks(sq, occupied) & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = Bitboard.encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
+        index = generateSlidingMoves(myBishops, moveList, index, enemy, occupied, 0);
 
         // --- Rooks ---
-        long r = myRooks;
-        while (r != 0) {
-            int sq = Long.numberOfTrailingZeros(r);
-            r &= r - 1;
-            long attacks = AttackLookups.getRookAttacks(sq, occupied) & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = Bitboard.encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
+        index = generateSlidingMoves(myRooks, moveList, index, enemy, occupied, 1);
 
         // --- Queens ---
-        long q = myQueens;
-        while (q != 0) {
-            int sq = Long.numberOfTrailingZeros(q);
-            q &= q - 1;
-            long attacks = AttackLookups.getQueenAttacks(sq, occupied) & enemy;
-            while (attacks != 0) {
-                int to = Long.numberOfTrailingZeros(attacks);
-                attacks &= attacks - 1;
-                int move = Bitboard.encodeMove(sq, to, 0);
-                moveList[index++] = move;
-            }
-        }
+        index = generateSlidingMoves(myQueens, moveList, index, enemy, occupied, 2);
 
         // --- King ---
-        long k = myKing;
-        while (k != 0) {
-            int sq = Long.numberOfTrailingZeros(k);
-            k &= k - 1;
-            long attacks = AttackLookups.KING_ATTACKS[sq] & enemy;
+        index = generateStepMoves(myKing, moveList, index, enemy, AttackLookups.KING_ATTACKS);
+        
+        return index;
+    }
+
+    private static int generateStepMoves(long pieces, int[] moveList, int index, long targets, long[] attackTable) {
+        while (pieces != 0) {
+            int sq = Long.numberOfTrailingZeros(pieces);
+            pieces &= pieces - 1;
+            long attacks = attackTable[sq] & targets;
             while (attacks != 0) {
                 int to = Long.numberOfTrailingZeros(attacks);
                 attacks &= attacks - 1;
-                int move = Bitboard.encodeMove(sq, to, 0);
-                moveList[index++] = move;
+                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
             }
         }
-        
+        return index;
+    }
+
+    private static int generateSlidingMoves(long pieces, int[] moveList, int index, long targets, long occupied, int type) {
+        while (pieces != 0) {
+            int sq = Long.numberOfTrailingZeros(pieces);
+            pieces &= pieces - 1;
+            long attacks;
+            if (type == 0) attacks = AttackLookups.getBishopAttacks(sq, occupied);
+            else if (type == 1) attacks = AttackLookups.getRookAttacks(sq, occupied);
+            else attacks = AttackLookups.getQueenAttacks(sq, occupied);
+
+            attacks &= targets;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                moveList[index++] = Bitboard.encodeMove(sq, to, 0);
+            }
+        }
         return index;
     }
 

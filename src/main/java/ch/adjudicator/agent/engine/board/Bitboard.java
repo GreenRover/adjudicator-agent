@@ -768,20 +768,41 @@ public class Bitboard {
 
     @SuppressWarnings("RedundantIfStatement")
     public boolean isSquareAttacked(int sq, Side attackerSide) {
-        long occ = occupiedSquares;
+        return isSquareAttacked(sq, attackerSide, occupiedSquares, -1L);
+    }
+
+    public boolean isSquareAttacked(int sq, Side attackerSide, long occupied, long attackersMask) {
+        long pawns, knights, king, bishopsQueens, rooksQueens;
+        int pawnColorIndex;
+
         if (attackerSide == Side.WHITE) {
-            if ((AttackLookups.PAWN_ATTACKS[Side.BLACK.ordinal()][sq] & whitePawns) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & whiteKnights) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & whiteKing) != 0) return true;
-            if ((AttackLookups.getBishopAttacks(sq, occ) & (whiteBishops | whiteQueens)) != 0) return true;
-            if ((AttackLookups.getRookAttacks(sq, occ) & (whiteRooks | whiteQueens)) != 0) return true;
+            pawns = whitePawns;
+            knights = whiteKnights;
+            king = whiteKing;
+            bishopsQueens = whiteBishops | whiteQueens;
+            rooksQueens = whiteRooks | whiteQueens;
+            pawnColorIndex = Side.BLACK.ordinal();
         } else {
-            if ((AttackLookups.PAWN_ATTACKS[Side.WHITE.ordinal()][sq] & blackPawns) != 0) return true;
-            if ((AttackLookups.KNIGHT_ATTACKS[sq] & blackKnights) != 0) return true;
-            if ((AttackLookups.KING_ATTACKS[sq] & blackKing) != 0) return true;
-            if ((AttackLookups.getBishopAttacks(sq, occ) & (blackBishops | blackQueens)) != 0) return true;
-            if ((AttackLookups.getRookAttacks(sq, occ) & (blackRooks | blackQueens)) != 0) return true;
+            pawns = blackPawns;
+            knights = blackKnights;
+            king = blackKing;
+            bishopsQueens = blackBishops | blackQueens;
+            rooksQueens = blackRooks | blackQueens;
+            pawnColorIndex = Side.WHITE.ordinal();
         }
+
+        pawns &= attackersMask;
+        knights &= attackersMask;
+        king &= attackersMask;
+        bishopsQueens &= attackersMask;
+        rooksQueens &= attackersMask;
+
+        if ((AttackLookups.PAWN_ATTACKS[pawnColorIndex][sq] & pawns) != 0) return true;
+        if ((AttackLookups.KNIGHT_ATTACKS[sq] & knights) != 0) return true;
+        if ((AttackLookups.KING_ATTACKS[sq] & king) != 0) return true;
+        if (bishopsQueens != 0 && (AttackLookups.getBishopAttacks(sq, occupied) & bishopsQueens) != 0) return true;
+        if (rooksQueens != 0 && (AttackLookups.getRookAttacks(sq, occupied) & rooksQueens) != 0) return true;
+        
         return false;
     }
 
