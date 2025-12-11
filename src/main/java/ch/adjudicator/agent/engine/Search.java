@@ -457,17 +457,24 @@ public class Search {
             }
         }
 
-        // Prevent infinite QS explosions
-        if (qsDepth > 20) return Evaluator.evaluate(board);
+        // Fix: Only return static evaluation if NOT in check
+        boolean inCheck = board.isKingAttacked();
+
+        // If we hit the limit but are in check, we MUST continue to find an evasion.
+        if (qsDepth > 20 && !inCheck) {
+            return Evaluator.evaluate(board);
+        }
+
+        // Safety break: If we are ridiculously deep (e.g. 100), stop anyway to prevent crashes
+        if (qsDepth > 100) {
+            return Evaluator.evaluate(board);
+        }
 
         nodesSearched++;
 
         if (ply >= MAX_DEPTH) {
             return Evaluator.evaluate(board);
         }
-
-        // Fix Tactical Blindness: Check for check
-        boolean inCheck = board.isKingAttacked();
         
         // Stand-pat: evaluate current position
         // Even if in check, use Eval as baseline to avoid false mate detection 
