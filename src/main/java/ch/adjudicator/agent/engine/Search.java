@@ -121,6 +121,11 @@ public class Search {
         // Iterative Deepening: search progressively deeper
         int score = 0;
         for (int depth = 1; depth <= MAX_DEPTH; depth++) {
+            // Hard Limit check
+            if (System.currentTimeMillis() > stopTime) {
+                break;
+            }
+
             if (stopped) {
                 break;
             }
@@ -266,7 +271,7 @@ public class Search {
      */
     private int alphaBeta(int alpha, int beta, int depth, int ply) {
         // Check time limit periodically
-        if ((nodesSearched & 2047) == 0) { // Check every 2048 nodes
+        if ((nodesSearched & 1023) == 0) { // Check every 1024 nodes
             if (System.currentTimeMillis() >= stopTime) {
                 stopped = true;
                 return 0;
@@ -361,14 +366,14 @@ public class Search {
 
             int score;
 
+            boolean givesCheck = board.isKingAttacked();
             int extension = 0;
-            if (inCheck && ply < MAX_DEPTH * 2) {
+            if ((inCheck || givesCheck) && ply < MAX_DEPTH * 2) {
                 extension = 1;
             }
             int nextDepth = depth - 1 + extension;
 
             if (i == 0) {
-                // First move: Full Window Search
                 score = -alphaBeta(-beta, -alpha, nextDepth, ply + 1);
             } else {
                 // Late moves: Null Window Search (PVS)
@@ -436,8 +441,8 @@ public class Search {
      * Prevents horizon effect.
      */
     private int quiescence(int alpha, int beta, int ply, int qsDepth) {
-        // 1. Check time every 2048 nodes
-        if ((nodesSearched & 2047) == 0) {
+        // 1. Check time every 1024 nodes
+        if ((nodesSearched & 1023) == 0) {
             if (System.currentTimeMillis() >= stopTime) {
                 stopped = true;
                 return 0;
@@ -450,43 +455,51 @@ public class Search {
             return Evaluator.evaluate(board);
         }
 
-        // Stand-pat: evaluate current position
-        int standPat = Evaluator.evaluate(board);
+        // Fix Tactical Blindness: Check for check
+        boolean inCheck = board.isKingAttacked();
+        int standPat = -INFINITY;
 
-        if (standPat >= beta) {
-            return beta;
+        if (inCheck) {
+            // Force alpha to -INFINITY (must find evasion)
+            alpha = -INFINITY;
+        } else {
+            // Stand-pat: evaluate current position
+            standPat = Evaluator.evaluate(board);
+
+            if (standPat >= beta) {
+                return beta;
+            }
+
+            // DELTA PRUNING
+            if (alpha < standPat) {
+                alpha = standPat;
+            }
         }
 
-        // DELTA PRUNING
-        if (alpha < standPat) {
-            alpha = standPat;
-        }
-
-        // Generate and search only tactical moves (captures)
+        // Generate moves
+        // If in check: ALL legal moves (evasions)
+        // If not in check: Only Loud moves (Captures/Promotions)
         int[] moves = moveBuffer[ply];
-        int count = board.generateLegalMoves(moves);
-        
+        int count;
+        if (inCheck) {
+            count = board.generateLegalMoves(moves);
+        } else {
+            count = board.generateLoudMoves(moves);
+        }
+
+        // Check for Checkmate/Stalemate (only if in check and no moves)
+        if (inCheck && count == 0) {
+            return -MATE_SCORE + (MAX_DEPTH - ply);
+        }
+
         for (int i = 0; i < count; i++) {
             int move = moves[i];
             
             boolean isCap = isCapture(move);
             boolean isProm = isPromotion(move);
             
-            if (!isCap && !isProm) {
-                if (qsDepth < 2) {
-                    board.makeMove(move);
-                    boolean givesCheck = board.isKingAttacked();
-                    board.unmakeMove(move);
-                    if (!givesCheck) {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-            }
-
-            // Delta Pruning
-            if (!isProm && isCap) {
+            // Delta Pruning (Only if not in check)
+            if (!inCheck && !isProm && isCap) {
                 Piece captured = board.getPieceAt(SQUARES[Bitboard.getTo(move)]);
                 int capturedValue = getPieceValue(captured);
                 if (standPat + capturedValue + 200 < alpha) {
@@ -495,7 +508,7 @@ public class Search {
             }
             
             // SEE Pruning for bad captures
-            if (isCap && !isProm) {
+            if (!inCheck && isCap && !isProm) {
                 int seeScore = StaticExchangeEvaluator.see(board, move);
                 if (seeScore < 0) {
                     continue;

@@ -64,6 +64,9 @@ public class AgentConfiguration {
                 if (hasValue(props.getProperty("AGENT_NAME"))) {
                     this.agentName = props.getProperty("AGENT_NAME");
                 }
+                if (hasValue(props.getProperty("GAMEMODE"))) {
+                    this.mode = props.getProperty("GAMEMODE");
+                }
                 LOGGER.info("Loaded configuration from {}", fileName);
             } catch (IOException e) {
                 LOGGER.warn("Failed to load {}: {}", fileName, e.getMessage());

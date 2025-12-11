@@ -69,13 +69,13 @@ public class TimeManager {
 
     /**
      * Get time multiplier based on move number.
-     * Opening (moves 1-10): play faster (0.3x)
+     * Opening (moves 1-10): play faster (1.0x)
      * Middlegame (moves 11-30): play normal/slower (1.2x)
      * Endgame (moves 31+): play stronger (1.3x)
      */
     private double getTimeMultiplier(int moveNumber) {
         if (moveNumber <= 10) {
-            return 0.3; // Opening: play very fast if out of book
+            return 1.0; // Opening: play very fast if out of book
         } else if (moveNumber <= 30) {
             return 1.2; // Middlegame: take more time for critical positions
         } else {

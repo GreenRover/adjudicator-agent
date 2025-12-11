@@ -1,0 +1,1 @@
+- Prefer hamcrest for assertions in tests

@@ -1056,6 +1056,183 @@ public class Bitboard {
         return index;
     }
 
+    public int generateLoudMoves(int[] moveList) {
+        int index = 0;
+        long friendly, enemy;
+        long myPawns, myKnights, myBishops, myRooks, myQueens, myKing;
+        
+        int promoRank, startRank;
+        boolean isWhite = (sideToMove == Side.WHITE);
+        int kingSq = isWhite ? whiteKingSq : blackKingSq;
+
+        if (isWhite) {
+            friendly = whitePieces;
+            enemy = blackPieces;
+            myPawns = whitePawns;
+            myKnights = whiteKnights;
+            myBishops = whiteBishops;
+            myRooks = whiteRooks;
+            myQueens = whiteQueens;
+            myKing = whiteKing;
+            
+            promoRank = 7;
+            startRank = 1;
+        } else {
+            friendly = blackPieces;
+            enemy = whitePieces;
+            myPawns = blackPawns;
+            myKnights = blackKnights;
+            myBishops = blackBishops;
+            myRooks = blackRooks;
+            myQueens = blackQueens;
+            myKing = blackKing;
+            
+            promoRank = 0;
+            startRank = 6;
+        }
+
+        long occupied = occupiedSquares;
+
+        // --- Pawns ---
+        long p = myPawns;
+        while (p != 0) {
+            int sq = Long.numberOfTrailingZeros(p);
+            p &= p - 1;
+
+            int rank = sq / 8;
+            int file = sq % 8;
+
+            int nextRank = isWhite ? rank + 1 : rank - 1;
+            int forwardSq = nextRank * 8 + file;
+            
+            // Check for Promotions (Capture and Non-Capture)
+            if (nextRank == promoRank) {
+                // Forward push promotion
+                if (((1L << forwardSq) & occupied) == 0) {
+                     // Add promo moves
+                     if (isLegalVirtual(encodeMove(sq, forwardSq, 1), kingSq)) {
+                         addPromoMoves(moveList, index, sq, forwardSq);
+                         index += 4;
+                     }
+                }
+                // Capture promotion
+                for (int dFile = -1; dFile <= 1; dFile += 2) {
+                    if (file + dFile >= 0 && file + dFile < 8) {
+                        int captureSq = nextRank * 8 + (file + dFile);
+                        long captureBit = 1L << captureSq;
+                        if ((captureBit & enemy) != 0) {
+                             if (isLegalVirtual(encodeMove(sq, captureSq, 1), kingSq)) {
+                                 addPromoMoves(moveList, index, sq, captureSq);
+                                 index += 4;
+                             }
+                        }
+                    }
+                }
+            } else {
+                // Normal Captures (Non-Promo)
+                for (int dFile = -1; dFile <= 1; dFile += 2) {
+                    if (file + dFile >= 0 && file + dFile < 8) {
+                        int captureSq = nextRank * 8 + (file + dFile);
+                        long captureBit = 1L << captureSq;
+                        if ((captureBit & enemy) != 0) {
+                            int move = encodeMove(sq, captureSq, 0);
+                            if (isLegalVirtual(move, kingSq)) {
+                                moveList[index++] = move;
+                            }
+                        } else if (captureSq == enPassantSquare.ordinal()) {
+                            int move = encodeMove(sq, captureSq, 0);
+                            if (isLegalVirtual(move, kingSq)) {
+                                moveList[index++] = move;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Knights ---
+        long n = myKnights;
+        while (n != 0) {
+            int sq = Long.numberOfTrailingZeros(n);
+            n &= n - 1;
+            long attacks = AttackLookups.KNIGHT_ATTACKS[sq] & enemy;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                int move = encodeMove(sq, to, 0);
+                if (isLegalVirtual(move, kingSq)) {
+                    moveList[index++] = move;
+                }
+            }
+        }
+
+        // --- Bishops ---
+        long b = myBishops;
+        while (b != 0) {
+            int sq = Long.numberOfTrailingZeros(b);
+            b &= b - 1;
+            long attacks = AttackLookups.getBishopAttacks(sq, occupied) & enemy;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                int move = encodeMove(sq, to, 0);
+                if (isLegalVirtual(move, kingSq)) {
+                    moveList[index++] = move;
+                }
+            }
+        }
+
+        // --- Rooks ---
+        long r = myRooks;
+        while (r != 0) {
+            int sq = Long.numberOfTrailingZeros(r);
+            r &= r - 1;
+            long attacks = AttackLookups.getRookAttacks(sq, occupied) & enemy;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                int move = encodeMove(sq, to, 0);
+                if (isLegalVirtual(move, kingSq)) {
+                    moveList[index++] = move;
+                }
+            }
+        }
+
+        // --- Queens ---
+        long q = myQueens;
+        while (q != 0) {
+            int sq = Long.numberOfTrailingZeros(q);
+            q &= q - 1;
+            long attacks = AttackLookups.getQueenAttacks(sq, occupied) & enemy;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                int move = encodeMove(sq, to, 0);
+                if (isLegalVirtual(move, kingSq)) {
+                    moveList[index++] = move;
+                }
+            }
+        }
+
+        // --- King ---
+        long k = myKing;
+        while (k != 0) {
+            int sq = Long.numberOfTrailingZeros(k);
+            k &= k - 1;
+            long attacks = AttackLookups.KING_ATTACKS[sq] & enemy;
+            while (attacks != 0) {
+                int to = Long.numberOfTrailingZeros(attacks);
+                attacks &= attacks - 1;
+                int move = encodeMove(sq, to, 0);
+                if (isLegalVirtual(move, kingSq)) {
+                    moveList[index++] = move;
+                }
+            }
+        }
+
+        return index;
+    }
+
     private void addPromoMoves(int[] moveList, int index, int from, int to) {
         moveList[index] = encodeMove(from, to, 1);
         moveList[index+1] = encodeMove(from, to, 2);

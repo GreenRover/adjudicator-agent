@@ -384,6 +384,14 @@ public class Evaluator {
             while (pawns != 0) {
                 int sq = Long.numberOfTrailingZeros(pawns);
                 if ((AttackLookups.PAWN_ATTACKS[enemySideOrd][sq] & kingZone) != 0) attackerCount++;
+
+                int pawnRank = sq / 8;
+                int pawnFile = sq % 8;
+                int distance = Math.max(Math.abs(pawnRank - rank), Math.abs(pawnFile - file));
+                if (distance <= 2) {
+                    mgScore -= 50; // Heavy penalty for enemy pawns near king
+                }
+
                 pawns &= pawns - 1;
             }
 
@@ -428,6 +436,24 @@ public class Evaluator {
         totalScore = add(totalScore, evaluatePieceType(bishops, BISHOP_VALUE, white, MG_BISHOP_TABLE, EG_BISHOP_TABLE));
         totalScore = add(totalScore, evaluatePieceType(rooks, ROOK_VALUE, white, MG_ROOK_TABLE, EG_ROOK_TABLE));
         totalScore = add(totalScore, evaluatePieceType(queens, QUEEN_VALUE, white, MG_QUEEN_TABLE, EG_QUEEN_TABLE));
+
+        // Bishop Pair Bonus
+        if (Long.bitCount(bishops) >= 2) {
+            totalScore = add(totalScore, pack(50, 50));
+        }
+
+        // Rook on Open File Bonus
+        long r = rooks;
+        while (r != 0) {
+            int sq = Long.numberOfTrailingZeros(r);
+            r &= r - 1;
+            int file = sq % 8;
+            long fileMask = 0x0101010101010101L << file;
+            long friendlyPawns = white ? board.whitePawns : board.blackPawns;
+            if ((friendlyPawns & fileMask) == 0) {
+                totalScore = add(totalScore, pack(20, 20));
+            }
+        }
 
         // King position evaluation
         long king = white ? board.whiteKing : board.blackKing;
