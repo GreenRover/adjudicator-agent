@@ -64,6 +64,27 @@ public class MoveOrdering {
     }
 
     /**
+     * Decay history scores by dividing by 8.
+     * To be called between moves.
+     */
+    public void decayHistory() {
+        for (int i = 0; i < 64; i++) {
+            for (int j = 0; j < 64; j++) {
+                historyScores[i][j] /= 8;
+            }
+        }
+    }
+
+    /**
+     * Reset move ordering data (killers and history).
+     * To be called on new game.
+     */
+    public void reset() {
+        clearKillers();
+        clearHistory();
+    }
+
+    /**
      * Update killer move when a beta cutoff occurs on a quiet move.
      */
     public void updateKiller(int move, int ply) {
@@ -161,10 +182,11 @@ public class MoveOrdering {
         int score = 0;
         int from = Bitboard.getFrom(move);
         int to = Bitboard.getTo(move);
+        Piece piece = board.getPieceAt(SQUARES[from]); // Get moving piece
         Piece victim = board.getPieceAt(SQUARES[to]);
 
         boolean isCapture = (victim != Piece.NONE) ||
-            ( (board.getPieceAt(SQUARES[from]) == Piece.WHITE_PAWN || board.getPieceAt(SQUARES[from]) == Piece.BLACK_PAWN) &&
+            ( (piece == Piece.WHITE_PAWN || piece == Piece.BLACK_PAWN) &&
               (Math.abs(from - to) % 8 != 0) && victim == Piece.NONE );
 
         // 2. Captures - MVV-LVA scoring
@@ -184,6 +206,18 @@ public class MoveOrdering {
         if (isPromotion(move)) {
             score = Math.max(score, 950000);
         }
+
+        // --- ADDED: Dangerous Pawn Pushes (Rank 7) ---
+        // Just below promotions/winning captures, but above killers
+        if (piece.getPieceType() == com.github.bhlangonijr.chesslib.PieceType.PAWN) {
+            int toRank = to / 8;
+            // White to Rank 7 (index 6) OR Black to Rank 2 (index 1)
+            if ((board.getSideToMove() == com.github.bhlangonijr.chesslib.Side.WHITE && toRank == 6) ||
+                (board.getSideToMove() == com.github.bhlangonijr.chesslib.Side.BLACK && toRank == 1)) {
+                score = Math.max(score, 850000);
+            }
+        }
+        // --- END ADD ---
 
         if (qSearch) {
             return score;

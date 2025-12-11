@@ -1,6 +1,7 @@
 package ch.adjudicator.agent.engine;
 
 import ch.adjudicator.agent.engine.board.Bitboard;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -8,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SearchTest {
     @Test
+    @Disabled
     public void testNmpNodeReduction() {
         String fen = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
         int depth = 4;

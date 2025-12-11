@@ -116,4 +116,21 @@ public class TimeManager {
     public void setMoveNumber(int moveNumber) {
         this.moveNumber = moveNumber;
     }
+
+    /**
+     * Check if time should be extended based on score drop.
+     * We extend if the score drops significantly, indicating a sudden change in evaluation
+     * (e.g., realizing a move leads to a draw or loss).
+     */
+    public boolean shouldExtendTime(int currentScore, int previousScore) {
+        // If we were winning (> 50cp) and now it's a draw (0) or bad, extend time.
+        if (previousScore > 50 && currentScore <= 10) {
+            return true;
+        }
+        // If score dropped significantly (e.g. 100cp drop) into drawish range
+        if (previousScore > 100 && currentScore < previousScore - 100) {
+            return true;
+        }
+        return false;
+    }
 }

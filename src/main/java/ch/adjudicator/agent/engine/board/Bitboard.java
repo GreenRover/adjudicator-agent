@@ -228,6 +228,7 @@ public class Bitboard {
     }
 
     void initPestoScores() {
+        // Initialize scores using constants
         mgPestoScore = 0;
         egPestoScore = 0;
 
@@ -764,6 +765,20 @@ public class Bitboard {
         int[] moves = new int[256];
         int count = generateLegalMoves(moves);
         return count == 0;
+    }
+
+    public boolean isRepetition() {
+        // Optimization: Step by 2 to check only same-side-to-move positions
+        int firstCheck = historyPly - 2;
+        // Optimization: Stop at halfMoveClock boundary (irreversible move)
+        int end = Math.max(0, historyPly - halfMoveClock);
+
+        for (int i = firstCheck; i >= end; i -= 2) {
+            if (history[i].zobristHash == this.zobristHash) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @SuppressWarnings("RedundantIfStatement")

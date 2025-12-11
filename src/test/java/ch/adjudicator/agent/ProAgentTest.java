@@ -17,7 +17,7 @@ class ProAgentTest {
 
     @BeforeEach
     void setUp() {
-        agent = new ProAgent("ProTestBot", false);
+        agent = new ProAgent("ProTestBot", false, false);
         // Initialize the agent's internal board by calling onGameStart
         agent.onGameStart(new GameInfo("test-game-pro", Color.WHITE, 300000, 0));
     }
@@ -44,7 +44,7 @@ class ProAgentTest {
         // without being flaky due to opening choices or limited book depth for rare lines.
 
         // Create a white agent that will respond to our moves
-        ProAgent whiteAgent = new ProAgent("WhiteTestBot", false);
+        ProAgent whiteAgent = new ProAgent("WhiteTestBot", false, false);
         whiteAgent.onGameStart(new GameInfo("test-book-game", Color.WHITE, 300000, 0));
 
         // Define a common opening line (unused beyond first move in this restricted test)

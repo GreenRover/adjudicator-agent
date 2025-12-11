@@ -29,17 +29,22 @@ public class Search {
     private int bestMoveFound; // Encoded int move
     private int nodesSearched;
     private int depthReached;
+    private int lastScore;
     private boolean enableNmp = true;
 
     // Pre-allocated move buffers [depth][max_moves]
     private final int[][] moveBuffer = new int[MAX_DEPTH + 1][256];
 
-    public Search(Bitboard board, TranspositionTable transpositionTable) {
+    public Search(Bitboard board, TranspositionTable transpositionTable, MoveOrdering moveOrdering) {
         this.board = board;
         this.stopped = false;
         this.nodesSearched = 0;
         this.transpositionTable = transpositionTable;
-        this.moveOrdering = new MoveOrdering(transpositionTable);
+        this.moveOrdering = moveOrdering;
+    }
+
+    public Search(Bitboard board, TranspositionTable transpositionTable) {
+        this(board, transpositionTable, new MoveOrdering(transpositionTable));
     }
 
     public Search(Bitboard board) {
@@ -53,11 +58,13 @@ public class Search {
      * @return Best move found (encoded as int)
      */
     public int findBestMove(long allocatedTimeMs) {
+        moveOrdering.clearKillers();
         stopTime = System.currentTimeMillis() + allocatedTimeMs;
         stopped = false;
         bestMoveFound = 0;
         nodesSearched = 0;
         depthReached = 0;
+        lastScore = 0;
 
         int numThreads = Runtime.getRuntime().availableProcessors();
         List<Search> helpers = new ArrayList<>();
@@ -68,7 +75,7 @@ public class Search {
             for (int i = 0; i < numThreads - 1; i++) {
                 Bitboard helperBoard = new Bitboard();
                 helperBoard.loadFromFen(fen);
-                Search helper = new Search(helperBoard, transpositionTable);
+                Search helper = new Search(helperBoard, transpositionTable, moveOrdering);
                 helper.setStopTime(stopTime);
                 helpers.add(helper);
 
@@ -113,6 +120,12 @@ public class Search {
         this.stopped = true;
     }
 
+    private TimeManager timeManager;
+
+    public void setTimeManager(TimeManager timeManager) {
+        this.timeManager = timeManager;
+    }
+
     public void runHelper() {
         runIterativeDeepening(0); // 0 means relying on stopTime or external stop
     }
@@ -154,6 +167,13 @@ public class Search {
             }
 
             score = currentScore;
+            
+            // Time Management: Check for score drop to extend time
+            if (timeManager != null && depth > 1 && timeManager.shouldExtendTime(score, lastScore)) {
+                stopTime += 500; // Extend by 500ms
+            }
+
+            lastScore = score;
 
             // Check if we ran out of time
             if (stopped) {
@@ -279,9 +299,14 @@ public class Search {
         }
 
         nodesSearched++;
-        
+
         if (ply > MAX_DEPTH) {
             return Evaluator.evaluate(board);
+        }
+
+        // Draw detection: Threefold repetition
+        if (ply > 0 && board.isRepetition()) {
+            return 0;
         }
 
         // Get Zobrist hash for current position
@@ -307,7 +332,9 @@ public class Search {
         boolean inCheck = board.isKingAttacked();
 
         // Reverse Futility Pruning (RFP)
-        if (depth <= 3 && !inCheck && ply > 0 && beta < MATE_SCORE) {
+        // Disabled to prevent blindness to immediate mate threats where static eval is high but position is lost.
+        // See TacticalRegressionTest.
+        if (false && depth <= 3 && !inCheck && ply > 0 && beta < MATE_SCORE) {
              int eval = Evaluator.evaluate(board);
              if (eval >= beta + (depth * 120)) {
                  return beta;
@@ -315,7 +342,9 @@ public class Search {
         }
 
         // Null Move Pruning
-        if (enableNmp && depth >= 3 && !inCheck) {
+        // Disabled for regression: NMP was pruning nodes where opponent had a mate threat (Qd7#),
+        // making the losing move look "just bad" (-500) instead of "fatal" (-MATE).
+        if (false && enableNmp && depth >= 3 && !inCheck) {
             Side side = board.getSideToMove();
             // Check for non-pawn/non-king material to avoid zugzwang
             long pieces = board.getBitboard(side);
@@ -345,7 +374,6 @@ public class Search {
         int[] moves = moveBuffer[ply];
         int count = board.generateLegalMoves(moves);
 
-        // Terminal node (checkmate or stalemate)
         if (count == 0) {
             if (inCheck) {
                 return -MATE_SCORE + (MAX_DEPTH - depth); // Prefer faster mates
@@ -376,7 +404,20 @@ public class Search {
 
             boolean givesCheck = board.isKingAttacked();
             int extension = 0;
-            if ((inCheck || givesCheck) && ply < MAX_DEPTH * 2) {
+
+            // DECISION: Only extend if we are currently IN check (`inCheck`).
+            // We specifically DO NOT extend if the move GIVES check (`givesCheck`).
+            //
+            // REASONING:
+            // 1. Extending on `givesCheck` caused a search explosion (timeout) in tactical positions
+            //    (e.g., Game 336), preventing the engine from reaching the depth needed to see the mate.
+            // 2. Quiescence Search (`quiescence`) already handles "in check" states correctly
+            //    (by generating evasions), so the tactical threat is detected at the horizon without
+            //    needing a full search extension here.
+            //
+            // IMPORTANCE: Do not re-enable `givesCheck` extension without verifying it doesn't
+            // re-introduce timeouts in `TacticalRegressionTest`.
+            if (inCheck && ply < MAX_DEPTH * 2) {
                 extension = 1;
             }
             int nextDepth = depth - 1 + extension;
@@ -389,7 +430,7 @@ public class Search {
                 int searchDepth = nextDepth;
 
                 // Check if LMR is applicable
-                if (i >= 4 && depth >= 3 && !isCapture(move) && !isPromotion(move) && !inCheck) {
+                if (i >= 4 && depth >= 3 && !isCapture(move) && !isPromotion(move) && !inCheck && !givesCheck) {
                     searchDepth -= 1;
                 }
 
@@ -477,22 +518,35 @@ public class Search {
         }
         
         // Stand-pat: evaluate current position
-        // Even if in check, use Eval as baseline to avoid false mate detection 
-        // when Q-Search is restricted to Loud Moves only.
-        int standPat = Evaluator.evaluate(board);
+        // If in check, we cannot stand pat, we MUST move.
+        int standPat = -INFINITY;
+        
+        if (!inCheck) {
+            standPat = Evaluator.evaluate(board);
 
-        if (standPat >= beta) {
-            return beta;
-        }
+            if (standPat >= beta) {
+                return beta;
+            }
 
-        if (alpha < standPat) {
-            alpha = standPat;
+            if (alpha < standPat) {
+                alpha = standPat;
+            }
         }
 
         // Generate moves
-        // Only Loud moves (Captures/Promotions), regardless of check state
+        // If in check, generate ALL moves (evasions).
+        // If qsDepth == 0, generate ALL moves to find checks.
+        // Otherwise, only loud moves.
         int[] moves = moveBuffer[ply];
-        int count = board.generateLoudMoves(moves);
+        int count;
+        boolean generateAll = inCheck || (qsDepth == 0);
+        if (generateAll) {
+            count = board.generatePseudoLegalMoves(moves);
+        } else {
+            count = board.generateLoudMoves(moves);
+        }
+
+        int legalMovesCount = 0;
 
         for (int i = 0; i < count; i++) {
             // Move Ordering for Q-Search
@@ -525,6 +579,15 @@ public class Search {
                 continue;
             }
 
+            // In QS, quiet moves must give check to be considered
+            if (!inCheck && !isCap && !isProm) {
+                if (!board.isKingAttacked()) {
+                    board.unmakeMove(move);
+                    continue;
+                }
+            }
+            legalMovesCount++;
+
             int score = -quiescence(-beta, -alpha, ply + 1, qsDepth + 1);
             board.unmakeMove(move);
             
@@ -533,6 +596,12 @@ public class Search {
             if (score >= beta) return beta;
             if (score > alpha) alpha = score;
         }
+
+        // If in check and no legal moves found, it's checkmate
+        if (inCheck && legalMovesCount == 0) {
+            return -MATE_SCORE + ply;
+        }
+
         return alpha;
     }
 
@@ -551,6 +620,10 @@ public class Search {
 
     public int getDepthReached() {
         return depthReached;
+    }
+
+    public int getLastScore() {
+        return lastScore;
     }
 
     private int getPieceValue(Piece piece) {

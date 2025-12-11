@@ -26,6 +26,7 @@ public class PawnStructure {
 
         long myPawns = white ? board.getBitboard(Piece.WHITE_PAWN) : board.getBitboard(Piece.BLACK_PAWN);
         long enemyPawns = white ? board.getBitboard(Piece.BLACK_PAWN) : board.getBitboard(Piece.WHITE_PAWN);
+        long enemyKing = white ? board.getBitboard(Piece.BLACK_KING) : board.getBitboard(Piece.WHITE_KING);
 
         // Pawn Structure
         for (int file = 0; file < 8; file++) {
@@ -72,9 +73,45 @@ public class PawnStructure {
             }
 
             if ((frontSpan & enemyPawns) == 0) {
-                int bonusRank = white ? rank : (7 - rank);
-                mgScore += MG_PASSED_PAWN_BONUS[bonusRank];
-                egScore += EG_PASSED_PAWN_BONUS[bonusRank];
+                // It is a passed pawn!
+
+                // --- CHECK: Blocked by Enemy King ---
+                // Only penalized if:
+                // 1. King is in the FRONT SPAN (blocking path or adjacent).
+                // 2. Pawn is NOT connected (connected pawns can support each other).
+                // Note: We use full frontSpan (rank+1..7 on file-1, file, file+1) to catch Kings 
+                // that are adjacent but effectively blocking (e.g. on edge).
+                boolean blockedByKing = (frontSpan & enemyKing) != 0;
+
+                boolean connected = false;
+                if (blockedByKing) {
+                    // Check for connections (friendly pawns on adjacent files, rank +/- 1)
+                    long neighborMask = 0;
+                    if (file > 0) neighborMask |= FILE_MASKS[file - 1];
+                    if (file < 7) neighborMask |= FILE_MASKS[file + 1];
+
+                    long neighbors = myPawns & neighborMask;
+                    while (neighbors != 0) {
+                        int nSq = Long.numberOfTrailingZeros(neighbors);
+                        int nRank = nSq / 8;
+                        if (Math.abs(nRank - rank) <= 1) {
+                            connected = true;
+                            break;
+                        }
+                        neighbors &= neighbors - 1;
+                    }
+                }
+
+                if (blockedByKing && !connected) {
+                    // Blocked and isolated: Dead pawn
+                    mgScore -= 100;
+                    egScore -= 2000;
+                } else {
+                    int bonusRank = white ? rank : (7 - rank);
+                    mgScore += MG_PASSED_PAWN_BONUS[bonusRank];
+                    egScore += EG_PASSED_PAWN_BONUS[bonusRank];
+                }
+                // --- END CHECK ---
             }
 
             tempPawns &= tempPawns - 1;

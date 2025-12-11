@@ -1,9 +1,6 @@
 package ch.adjudicator.agent;
 
-import ch.adjudicator.agent.engine.PolyglotBook;
-import ch.adjudicator.agent.engine.Search;
-import ch.adjudicator.agent.engine.TimeManager;
-import ch.adjudicator.agent.engine.TranspositionTable;
+import ch.adjudicator.agent.engine.*;
 import ch.adjudicator.agent.engine.board.Bitboard;
 import ch.adjudicator.client.*;
 import com.github.bhlangonijr.chesslib.Square;
@@ -25,9 +22,11 @@ import java.util.concurrent.TimeUnit;
 @SuppressWarnings("DuplicatedCode")
 public class ProAgent implements Agent {
     private static final Logger LOGGER = LoggerFactory.getLogger(ProAgent.class);
+    private final boolean ponderingEnabled;
 
     private final String name;
     private final TranspositionTable transpositionTable;
+    private final MoveOrdering moveOrdering;
     private final CpuTemperatureMonitor temperatureMonitor;
     private Bitboard board;
     private PolyglotBook bookPerfect;
@@ -40,7 +39,7 @@ public class ProAgent implements Agent {
     private boolean lastMoveFromBook;
     private Search ponderSearch;
     private Thread ponderThread;
-    
+
     private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "PonderWatchdog");
         t.setDaemon(true);
@@ -50,12 +49,18 @@ public class ProAgent implements Agent {
     private long ponderTimeoutMs = 5 * 60 * 1000; // 5 minutes
 
     public ProAgent(String name, boolean monitorCpuTemp) {
+        this(name, monitorCpuTemp, true);
+    }
+
+    public ProAgent(String name, boolean monitorCpuTemp, boolean ponderingEnabled) {
         this.name = name;
         this.board = new Bitboard();
         this.moveCount = 0;
         this.disableBookLookup = false;
         this.transpositionTable = new TranspositionTable();
+        this.moveOrdering = new MoveOrdering(transpositionTable);
         this.temperatureMonitor = monitorCpuTemp ? new CpuTemperatureMonitor() : null;
+        this.ponderingEnabled = ponderingEnabled;
 
         // Load opening books
         LOGGER.info("[{}] Loading opening books...", name);
@@ -102,7 +107,7 @@ public class ProAgent implements Agent {
         LOGGER.info("Protocol: gRPC");
 
         // Create agent
-        ProAgent agent = new ProAgent(config.getAgentName(), config.isMonitorCpuTemp());
+        ProAgent agent = new ProAgent(config.getAgentName(), config.isMonitorCpuTemp(), config.isPonderingEnabled());
 
         // Create client and play game
         AdjudicatorClient client = new AdjudicatorClient(config.getServerAddress(), config.getApiKey(), true);
@@ -124,6 +129,9 @@ public class ProAgent implements Agent {
     public String getMove(MoveRequest request) throws Exception {
         // Stop pondering
         stopPondering();
+
+        // Decay history scores
+        moveOrdering.decayHistory();
 
         moveCount++;
         LOGGER.info("[{}] Move #{} - Time remaining: {}ms", name, moveCount, request.getYourTimeMs());
@@ -207,7 +215,8 @@ public class ProAgent implements Agent {
 
             // Search for best move
             long searchStart = System.currentTimeMillis();
-            Search search = new Search(board, transpositionTable);
+            Search search = new Search(board, transpositionTable, moveOrdering);
+            search.setTimeManager(timeManager);
             selectedMove = search.findBestMove(allocatedTime);
             long searchTime = System.currentTimeMillis() - searchStart;
 
@@ -229,7 +238,7 @@ public class ProAgent implements Agent {
         LOGGER.info("[{}] Playing: {} (from {} legal moves)", name, moveStr, legalMoves.size());
 
         // Start pondering (only if CPU temperature is safe)
-        if (temperatureMonitor == null || temperatureMonitor.isSafeForPondering()) {
+        if (ponderingEnabled && (temperatureMonitor == null || temperatureMonitor.isSafeForPondering())) {
             long zobristHash = board.getZobristKey();
             int ponderMove = transpositionTable.getBestMove(zobristHash);
 
@@ -239,7 +248,7 @@ public class ProAgent implements Agent {
                 ponderBoard.loadFromFen(board.getFen());
                 ponderBoard.makeMove(ponderMove);
 
-                ponderSearch = new Search(ponderBoard, transpositionTable);
+                ponderSearch = new Search(ponderBoard, transpositionTable, moveOrdering);
                 ponderThread = new Thread(() -> {
                     ponderSearch.findBestMove(36000000L); // 10 hours
                 });
@@ -277,6 +286,7 @@ public class ProAgent implements Agent {
 
         // Clear transposition table for new game
         transpositionTable.clear();
+        moveOrdering.reset();
     }
 
     @Override
@@ -333,17 +343,17 @@ public class ProAgent implements Agent {
         Square from = Square.values()[Bitboard.getFrom(move)];
         Square to = Square.values()[Bitboard.getTo(move)];
         int promo = Bitboard.getPromo(move);
-        
+
         StringBuilder sb = new StringBuilder();
         sb.append(from.toString().toLowerCase());
         sb.append(to.toString().toLowerCase());
-        
+
         if (promo != 0) {
-            switch(promo) {
-                 case 1 -> sb.append("n");
-                 case 2 -> sb.append("b");
-                 case 3 -> sb.append("r");
-                 case 4 -> sb.append("q");
+            switch (promo) {
+                case 1 -> sb.append("n");
+                case 2 -> sb.append("b");
+                case 3 -> sb.append("r");
+                case 4 -> sb.append("q");
             }
         }
         return sb.toString();

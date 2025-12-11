@@ -1,5 +1,6 @@
 package ch.adjudicator.agent;
 
+import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,9 @@ public class AgentConfiguration {
     private String mode;
     private String timeControl;
     private boolean monitorCpuTemp = true;
+
+    @Getter
+    private boolean ponderingEnabled = false;
 
     public AgentConfiguration(String[] args) {
         this(args, ENV_FILE_NAME);

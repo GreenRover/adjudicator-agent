@@ -58,14 +58,14 @@ public class Evaluator {
 
         // Evaluate white pieces
         whiteAdditional = add(whiteAdditional, evaluateCastling(board, true));
-        // whiteAdditional = add(whiteAdditional, evaluateMobility(board, true)); // Too slow for now
+        whiteAdditional = add(whiteAdditional, evaluateMobilityFast(board, true));
         whiteAdditional = add(whiteAdditional, evaluateBlocking(board, true));
         whiteAdditional = add(whiteAdditional, KingSafety.evaluate(board, true));
         whiteAdditional = add(whiteAdditional, PawnStructure.evaluate(board, true));
 
         // Evaluate black pieces
         blackAdditional = add(blackAdditional, evaluateCastling(board, false));
-        // blackAdditional = add(blackAdditional, evaluateMobility(board, false)); // Too slow for now
+        blackAdditional = add(blackAdditional, evaluateMobilityFast(board, false));
         blackAdditional = add(blackAdditional, evaluateBlocking(board, false));
         blackAdditional = add(blackAdditional, KingSafety.evaluate(board, false));
         blackAdditional = add(blackAdditional, PawnStructure.evaluate(board, false));
@@ -78,6 +78,56 @@ public class Evaluator {
         int score = (mgScore * phase + egScore * (256 - phase)) / 256;
 
         return (board.getSideToMove() == Side.WHITE) ? score : -score;
+    }
+
+    private static long evaluateMobilityFast(Bitboard board, boolean white) {
+        int mgScore = 0;
+        int egScore = 0;
+        long occupied = board.getOccupiedSquares();
+        long myPieces = board.getBitboard(white ? Side.WHITE : Side.BLACK);
+
+        // --- ADD START: Knight Mobility ---
+        long knights = white ? board.getBitboard(Piece.WHITE_KNIGHT) : board.getBitboard(Piece.BLACK_KNIGHT);
+        while (knights != 0) {
+            int sq = Long.numberOfTrailingZeros(knights);
+            long attacks = AttackLookups.KNIGHT_ATTACKS[sq];
+            // Count attacks that don't hit own pieces
+            int mobility = Long.bitCount(attacks & ~myPieces);
+
+            // Knights are worth slightly less per square than sliders
+            mgScore += mobility * (MG_MOBILITY_WEIGHT - 5);
+            egScore += mobility * (EG_MOBILITY_WEIGHT - 5);
+            knights &= knights - 1;
+        }
+        // --- ADD END ---
+
+        // --- ADD START: Bishop Mobility ---
+        long bishops = white ? board.getBitboard(Piece.WHITE_BISHOP) : board.getBitboard(Piece.BLACK_BISHOP);
+        while (bishops != 0) {
+            int sq = Long.numberOfTrailingZeros(bishops);
+            long attacks = AttackLookups.getBishopAttacks(sq, occupied);
+            int mobility = Long.bitCount(attacks & ~myPieces);
+
+            mgScore += mobility * MG_MOBILITY_WEIGHT;
+            egScore += mobility * EG_MOBILITY_WEIGHT;
+            bishops &= bishops - 1;
+        }
+        // --- ADD END ---
+
+        long rooks = white ? board.getBitboard(Piece.WHITE_ROOK) : board.getBitboard(Piece.BLACK_ROOK);
+        while (rooks != 0) {
+            int sq = Long.numberOfTrailingZeros(rooks);
+            long attacks = AttackLookups.getRookAttacks(sq, occupied);
+            int mobility = Long.bitCount(attacks & ~myPieces);
+
+            // Weight: use configured weight
+            mgScore += mobility * MG_MOBILITY_WEIGHT;
+            egScore += mobility * EG_MOBILITY_WEIGHT;
+
+            rooks &= rooks - 1;
+        }
+
+        return pack(mgScore, egScore);
     }
 
     /**
@@ -251,5 +301,59 @@ public class Evaluator {
         int mg = unpackMg(score1) + unpackMg(score2);
         int eg = unpackEg(score1) + unpackEg(score2);
         return pack(mg, eg);
+    }
+    public static int calculateMgScoreFromScratch(Bitboard board) {
+        int mgScore = 0;
+
+        // White
+        mgScore += calculateScoreFor(board.getBitboard(Piece.WHITE_PAWN), PAWN_VALUE, true, MG_PAWN_TABLE);
+        mgScore += calculateScoreFor(board.getBitboard(Piece.WHITE_KNIGHT), KNIGHT_VALUE, true, MG_KNIGHT_TABLE);
+        mgScore += calculateScoreFor(board.getBitboard(Piece.WHITE_BISHOP), BISHOP_VALUE, true, MG_BISHOP_TABLE);
+        mgScore += calculateScoreFor(board.getBitboard(Piece.WHITE_ROOK), ROOK_VALUE, true, MG_ROOK_TABLE);
+        mgScore += calculateScoreFor(board.getBitboard(Piece.WHITE_QUEEN), QUEEN_VALUE, true, MG_QUEEN_TABLE);
+        mgScore += calculateScoreFor(board.getBitboard(Piece.WHITE_KING), 0, true, MG_KING_TABLE);
+
+        // Black
+        mgScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_PAWN), PAWN_VALUE, false, MG_PAWN_TABLE);
+        mgScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_KNIGHT), KNIGHT_VALUE, false, MG_KNIGHT_TABLE);
+        mgScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_BISHOP), BISHOP_VALUE, false, MG_BISHOP_TABLE);
+        mgScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_ROOK), ROOK_VALUE, false, MG_ROOK_TABLE);
+        mgScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_QUEEN), QUEEN_VALUE, false, MG_QUEEN_TABLE);
+        mgScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_KING), 0, false, MG_KING_TABLE);
+
+        return mgScore;
+    }
+
+    public static int calculateEgScoreFromScratch(Bitboard board) {
+        int egScore = 0;
+
+        // White
+        egScore += calculateScoreFor(board.getBitboard(Piece.WHITE_PAWN), PAWN_VALUE, true, EG_PAWN_TABLE);
+        egScore += calculateScoreFor(board.getBitboard(Piece.WHITE_KNIGHT), KNIGHT_VALUE, true, EG_KNIGHT_TABLE);
+        egScore += calculateScoreFor(board.getBitboard(Piece.WHITE_BISHOP), BISHOP_VALUE, true, EG_BISHOP_TABLE);
+        egScore += calculateScoreFor(board.getBitboard(Piece.WHITE_ROOK), ROOK_VALUE, true, EG_ROOK_TABLE);
+        egScore += calculateScoreFor(board.getBitboard(Piece.WHITE_QUEEN), QUEEN_VALUE, true, EG_QUEEN_TABLE);
+        egScore += calculateScoreFor(board.getBitboard(Piece.WHITE_KING), 0, true, EG_KING_TABLE);
+
+        // Black
+        egScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_PAWN), PAWN_VALUE, false, EG_PAWN_TABLE);
+        egScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_KNIGHT), KNIGHT_VALUE, false, EG_KNIGHT_TABLE);
+        egScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_BISHOP), BISHOP_VALUE, false, EG_BISHOP_TABLE);
+        egScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_ROOK), ROOK_VALUE, false, EG_ROOK_TABLE);
+        egScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_QUEEN), QUEEN_VALUE, false, EG_QUEEN_TABLE);
+        egScore -= calculateScoreFor(board.getBitboard(Piece.BLACK_KING), 0, false, EG_KING_TABLE);
+
+        return egScore;
+    }
+
+    private static int calculateScoreFor(long bitboard, int value, boolean white, int[] table) {
+        int score = 0;
+        while (bitboard != 0) {
+            int square = Long.numberOfTrailingZeros(bitboard);
+            int tableSquare = white ? (square ^ 56) : square;
+            score += value + table[tableSquare];
+            bitboard &= bitboard - 1;
+        }
+        return score;
     }
 }

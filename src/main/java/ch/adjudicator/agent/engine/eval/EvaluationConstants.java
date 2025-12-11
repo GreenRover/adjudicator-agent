@@ -2,7 +2,7 @@ package ch.adjudicator.agent.engine.eval;
 
 public class EvaluationConstants {
     // Piece values (centipawns)
-    public static final int PAWN_VALUE = 100;
+    public static final int PAWN_VALUE = 105;
     public static final int KNIGHT_VALUE = 320;
     public static final int BISHOP_VALUE = 330;
     public static final int ROOK_VALUE = 500;
@@ -17,7 +17,7 @@ public class EvaluationConstants {
 
 
     // Mobility
-    public static final int MG_MOBILITY_WEIGHT = 10;
+    public static final int MG_MOBILITY_WEIGHT = 15;
     public static final int EG_MOBILITY_WEIGHT = 10;
 
     // Centrality

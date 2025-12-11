@@ -46,23 +46,26 @@ public class TranspositionTable {
      */
     public void store(long zobristHash, int bestMove, int score, int depth, int flag) {
         int index = getIndex(zobristHash);
-        TTEntry deepEntry = table[index];
-        TTEntry recentEntry = table[index + 1];
+        // Lock on the "Deep" entry object to protect the whole bucket (Deep + Recent)
+        synchronized (table[index]) {
+            TTEntry deepEntry = table[index];
+            TTEntry recentEntry = table[index + 1];
 
-        // Strategy:
-        // Slot 0 (deepEntry): Keeps the deepest search result seen so far for this bucket.
-        // Slot 1 (recentEntry): Keeps the most recent search result (Always Replace).
+            // Strategy:
+            // Slot 0 (deepEntry): Keeps the deepest search result seen so far for this bucket.
+            // Slot 1 (recentEntry): Keeps the most recent search result (Always Replace).
 
-        // If the new entry is deeper than or equal to the deepEntry, it takes the deep slot.
-        // The old deepEntry is demoted to the recentEntry slot (to preserve it if it's different).
-        if (depth >= deepEntry.depth) {
-            if (deepEntry.zobristKey != 0 && deepEntry.zobristKey != zobristHash) {
-                recentEntry.copyFrom(deepEntry);
+            // If the new entry is deeper than or equal to the deepEntry, it takes the deep slot.
+            // The old deepEntry is demoted to the recentEntry slot (to preserve it if it's different).
+            if (depth >= deepEntry.depth) {
+                if (deepEntry.zobristKey != 0 && deepEntry.zobristKey != zobristHash) {
+                    recentEntry.copyFrom(deepEntry);
+                }
+                deepEntry.store(zobristHash, bestMove, score, depth, flag);
+            } else {
+                // Otherwise, it goes to the recent slot (Always Replace)
+                recentEntry.store(zobristHash, bestMove, score, depth, flag);
             }
-            deepEntry.store(zobristHash, bestMove, score, depth, flag);
-        } else {
-            // Otherwise, it goes to the recent slot (Always Replace)
-            recentEntry.store(zobristHash, bestMove, score, depth, flag);
         }
     }
 
@@ -72,24 +75,26 @@ public class TranspositionTable {
      */
     public TTEntry probe(long zobristHash) {
         int index = getIndex(zobristHash);
-        TTEntry deepEntry = table[index];
-        TTEntry recentEntry = table[index + 1];
+        synchronized (table[index]) {
+            TTEntry deepEntry = table[index];
+            TTEntry recentEntry = table[index + 1];
 
-        // Check deep entry first
-        if (deepEntry.isValid(zobristHash)) {
-            // Check if recent entry is valid and somehow deeper (rare/collision case)
-            if (recentEntry.isValid(zobristHash) && recentEntry.depth > deepEntry.depth) {
+            // Check deep entry first
+            if (deepEntry.isValid(zobristHash)) {
+                // Check if recent entry is valid and somehow deeper (rare/collision case)
+                if (recentEntry.isValid(zobristHash) && recentEntry.depth > deepEntry.depth) {
+                    return recentEntry;
+                }
+                return deepEntry;
+            }
+
+            // Check recent entry
+            if (recentEntry.isValid(zobristHash)) {
                 return recentEntry;
             }
-            return deepEntry;
-        }
 
-        // Check recent entry
-        if (recentEntry.isValid(zobristHash)) {
-            return recentEntry;
+            return null;
         }
-
-        return null;
     }
 
     /**
@@ -125,11 +130,11 @@ public class TranspositionTable {
         public static final int EXACT = 0;
         public static final int LOWER_BOUND = 1;
         public static final int UPPER_BOUND = 2;
-        public volatile long zobristKey;
-        public volatile int bestMove;
-        public volatile int score;
-        public volatile int depth;
-        public volatile int flag; // EXACT, LOWER_BOUND, UPPER_BOUND
+        public long zobristKey;
+        public int bestMove;
+        public int score;
+        public int depth;
+        public int flag; // EXACT, LOWER_BOUND, UPPER_BOUND
 
         public TTEntry() {
             this.zobristKey = 0;
