@@ -149,6 +149,7 @@ public class Bitboard {
         zobristHash = 0L;
         whiteKingSq = -1;
         blackKingSq = -1;
+        initPestoScores();
     }
 
     // --- Core Bitboard Operations ---
@@ -595,6 +596,26 @@ public class Bitboard {
     private void putPieceInternal(Piece piece, int sqIdx) {
         if (piece == Piece.NONE) return;
 
+        // Incremental Score Update
+        int pIdx = piece.ordinal();
+        int value = PIECE_VALUES[pIdx];
+        int[] mgTable = MG_TABLES[pIdx];
+        int[] egTable = EG_TABLES[pIdx];
+
+        boolean isWhite = PIECE_SIDES[pIdx] == Side.WHITE;
+        int tableSquare = isWhite ? (sqIdx ^ 56) : sqIdx;
+
+        int scoreMg = value + mgTable[tableSquare];
+        int scoreEg = value + egTable[tableSquare];
+
+        if (isWhite) {
+            mgPestoScore += scoreMg;
+            egPestoScore += scoreEg;
+        } else {
+            mgPestoScore -= scoreMg;
+            egPestoScore -= scoreEg;
+        }
+
         long bit = 1L << sqIdx;
 
         switch (piece) {
@@ -621,6 +642,10 @@ public class Bitboard {
         }
         occupiedSquares |= bit;
         mailbox[sqIdx] = piece;
+    }
+
+    private void removePieceInternal(Piece piece, int sqIdx) {
+        if (piece == Piece.NONE) return;
 
         // Incremental Score Update
         int pIdx = piece.ordinal();
@@ -635,16 +660,12 @@ public class Bitboard {
         int scoreEg = value + egTable[tableSquare];
 
         if (isWhite) {
-            mgPestoScore += scoreMg;
-            egPestoScore += scoreEg;
-        } else {
             mgPestoScore -= scoreMg;
             egPestoScore -= scoreEg;
+        } else {
+            mgPestoScore += scoreMg;
+            egPestoScore += scoreEg;
         }
-    }
-
-    private void removePieceInternal(Piece piece, int sqIdx) {
-        if (piece == Piece.NONE) return;
 
         long bit = 1L << sqIdx;
         long mask = ~bit;
@@ -671,26 +692,6 @@ public class Bitboard {
         }
         occupiedSquares &= mask;
         mailbox[sqIdx] = Piece.NONE;
-
-        // Incremental Score Update
-        int pIdx = piece.ordinal();
-        int value = PIECE_VALUES[pIdx];
-        int[] mgTable = MG_TABLES[pIdx];
-        int[] egTable = EG_TABLES[pIdx];
-
-        boolean isWhite = PIECE_SIDES[pIdx] == Side.WHITE;
-        int tableSquare = isWhite ? (sqIdx ^ 56) : sqIdx;
-
-        int scoreMg = value + mgTable[tableSquare];
-        int scoreEg = value + egTable[tableSquare];
-
-        if (isWhite) {
-            mgPestoScore -= scoreMg;
-            egPestoScore -= scoreEg;
-        } else {
-            mgPestoScore += scoreMg;
-            egPestoScore += scoreEg;
-        }
     }
 
     public void doMove(Move move) {

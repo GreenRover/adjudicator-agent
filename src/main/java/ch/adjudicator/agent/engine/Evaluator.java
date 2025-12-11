@@ -238,7 +238,6 @@ public class Evaluator {
         long blackAdditional = 0;
 
         // Evaluate white pieces
-        // whiteAdditional = add(whiteAdditional, evaluatePieces(board, true)); // Covered by incremental score
         whiteAdditional = add(whiteAdditional, evaluateCastling(board, true));
         // whiteAdditional = add(whiteAdditional, evaluateMobility(board, true)); // Too slow for now
         whiteAdditional = add(whiteAdditional, evaluateBlocking(board, true));
@@ -246,7 +245,6 @@ public class Evaluator {
         whiteAdditional = add(whiteAdditional, evaluatePawnStructure(board, true));
 
         // Evaluate black pieces
-        // blackAdditional = add(blackAdditional, evaluatePieces(board, false)); // Covered by incremental score
         blackAdditional = add(blackAdditional, evaluateCastling(board, false));
         // blackAdditional = add(blackAdditional, evaluateMobility(board, false)); // Too slow for now
         blackAdditional = add(blackAdditional, evaluateBlocking(board, false));
@@ -340,70 +338,11 @@ public class Evaluator {
                 mgScore += MG_KING_CENTER_PENALTY;
             }
 
-            // 3. Attacker Count
-            /*
-            // Get squares adjacent to king (King Zone)
-            long kingZone = AttackLookups.KING_ATTACKS[kingSq];
-
-            // Iterate enemy pieces to count attackers
-            int attackerCount = 0;
-            // Enemy pieces
-            long enemyKnights = white ? board.blackKnights : board.whiteKnights;
-            long enemyBishops = white ? board.blackBishops : board.whiteBishops;
-            long enemyRooks = white ? board.blackRooks : board.whiteRooks;
-            long enemyQueens = white ? board.blackQueens : board.whiteQueens;
-            long enemyPawns = white ? board.blackPawns : board.whitePawns;
-
-            long occupied = board.occupiedSquares;
-
-            // Knights
-            long knights = enemyKnights;
-            while (knights != 0) {
-                int sq = Long.numberOfTrailingZeros(knights);
-                if ((AttackLookups.KNIGHT_ATTACKS[sq] & kingZone) != 0) attackerCount++;
-                knights &= knights - 1;
+            // 3. King on Open File
+            long fileMask = FILE_MASKS[file];
+            if ((ownPawns & fileMask) == 0) {
+                mgScore += MG_KING_OPEN_FILE_PENALTY;
             }
-
-            // Bishops + Queens (Sliding)
-            long bq = enemyBishops | enemyQueens;
-            while (bq != 0) {
-                int sq = Long.numberOfTrailingZeros(bq);
-                if ((AttackLookups.getBishopAttacks(sq, occupied) & kingZone) != 0) attackerCount++;
-                bq &= bq - 1;
-            }
-
-            // Rooks + Queens (Sliding)
-            long rq = enemyRooks | enemyQueens;
-            while (rq != 0) {
-                int sq = Long.numberOfTrailingZeros(rq);
-                if ((AttackLookups.getRookAttacks(sq, occupied) & kingZone) != 0) attackerCount++;
-                rq &= rq - 1;
-            }
-
-            // Pawns
-            // Enemy pawns attack capture squares.
-            // If I am White, enemy is Black. Black pawns attack "South".
-            int enemySideOrd = white ? 1 : 0; // 0=White, 1=Black
-            long pawns = enemyPawns;
-            while (pawns != 0) {
-                int sq = Long.numberOfTrailingZeros(pawns);
-                if ((AttackLookups.PAWN_ATTACKS[enemySideOrd][sq] & kingZone) != 0) attackerCount++;
-
-                int pawnRank = sq / 8;
-                int pawnFile = sq % 8;
-                int distance = Math.max(Math.abs(pawnRank - rank), Math.abs(pawnFile - file));
-                if (distance <= 2) {
-                    mgScore -= 50; // Heavy penalty for enemy pawns near king
-                }
-
-                pawns &= pawns - 1;
-            }
-
-            if (attackerCount > 0) {
-                int penaltyIndex = Math.min(attackerCount, MG_ATTACKER_PENALTY.length - 1);
-                mgScore += MG_ATTACKER_PENALTY[penaltyIndex];
-            }
-            */
         }
 
         return pack(mgScore, egScore);
@@ -424,72 +363,6 @@ public class Evaluator {
         return Math.min(phase * 256 / 24, 256);
     }
 
-    /**
-     * Evaluate all pieces of one color.
-     */
-    private static long evaluatePieces(Bitboard board, boolean white) {
-        long totalScore = 0;
-
-        long pawns = white ? board.whitePawns : board.blackPawns;
-        long knights = white ? board.whiteKnights : board.blackKnights;
-        long bishops = white ? board.whiteBishops : board.blackBishops;
-        long rooks = white ? board.whiteRooks : board.blackRooks;
-        long queens = white ? board.whiteQueens : board.blackQueens;
-
-        totalScore = add(totalScore, evaluatePieceType(pawns, PAWN_VALUE, white, MG_PAWN_TABLE, EG_PAWN_TABLE));
-        totalScore = add(totalScore, evaluatePieceType(knights, KNIGHT_VALUE, white, MG_KNIGHT_TABLE, EG_KNIGHT_TABLE));
-        totalScore = add(totalScore, evaluatePieceType(bishops, BISHOP_VALUE, white, MG_BISHOP_TABLE, EG_BISHOP_TABLE));
-        totalScore = add(totalScore, evaluatePieceType(rooks, ROOK_VALUE, white, MG_ROOK_TABLE, EG_ROOK_TABLE));
-        totalScore = add(totalScore, evaluatePieceType(queens, QUEEN_VALUE, white, MG_QUEEN_TABLE, EG_QUEEN_TABLE));
-
-        // Bishop Pair Bonus
-        if (Long.bitCount(bishops) >= 2) {
-            totalScore = add(totalScore, pack(50, 50));
-        }
-
-        // Rook on Open File Bonus
-        long r = rooks;
-        while (r != 0) {
-            int sq = Long.numberOfTrailingZeros(r);
-            r &= r - 1;
-            int file = sq % 8;
-            long fileMask = 0x0101010101010101L << file;
-            long friendlyPawns = white ? board.whitePawns : board.blackPawns;
-            if ((friendlyPawns & fileMask) == 0) {
-                totalScore = add(totalScore, pack(20, 20));
-            }
-        }
-
-        // King position evaluation
-        long king = white ? board.whiteKing : board.blackKing;
-        if (king != 0) {
-            int square = Long.numberOfTrailingZeros(king);
-            int tableSquare = white ? (square ^ 56) : square; // Flip for white
-            totalScore = add(totalScore, pack(MG_KING_TABLE[tableSquare], EG_KING_TABLE[tableSquare]));
-        }
-
-        return totalScore;
-    }
-
-    /**
-     * Evaluate a specific piece type.
-     */
-    private static long evaluatePieceType(long bitboard, int value, boolean white, int[] mgTable, int[] egTable) {
-        int mgScore = 0;
-        int egScore = 0;
-
-        while (bitboard != 0) {
-            int square = Long.numberOfTrailingZeros(bitboard);
-            int tableSquare = white ? (square ^ 56) : square; // Flip rank for white (Table is R8->R1)
-
-            mgScore += value + mgTable[tableSquare];
-            egScore += value + egTable[tableSquare];
-
-            bitboard &= bitboard - 1; // Clear the lowest set bit
-        }
-
-        return pack(mgScore, egScore);
-    }
 
     private static int popCount(long bitboard) {
         return Long.bitCount(bitboard);
